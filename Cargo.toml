@@ -1,0 +1,9 @@
+[package]
+name = "vision-2020"
+version = "0.1.0"
+authors = []
+edition = "2018"
+
+[dependencies]
+opencv = { version = "0.28", default-features = false, features = ["opencv-41"] }
+standard-vision = { git = "https://github.com/roboticsteam4904/standard-vision" }
