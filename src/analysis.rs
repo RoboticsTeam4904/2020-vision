@@ -1,18 +1,22 @@
 use standard_vision::traits::ContourAnalyzer;
-use standard_vision::types::{ Pose, CameraConfig, Target };
+use standard_vision::types::{ CameraConfig, Contour, Pose, Target };
 
 pub struct WallTapeContourAnalyzer {}
 
 impl WallTapeContourAnalyzer {
-    fn get_distance(config: &CameraConfig, ) -> f32 {
+    fn make_bounding_rect() -> Contour {
+
+    }
+
+    fn get_distance(config: &CameraConfig, actual_height: &f64, contour: &Contour) -> f64 {
+        return (config.focal_length * actual_height * image.pixels * config.dimensions[0]) / (OBJECT_HEIGHT * config.sensor_height) // figure out object height
+    }
+
+    fn get_theta(config: &CameraConfig, contour: &Contour, distance: &f64,) -> f64 {
         
     }
 
-    fn get_theta() -> f32 {
-
-    }
-
-    fn get_beta() -> f32 {
+    fn get_beta() -> f64 {
 
     }
 }
