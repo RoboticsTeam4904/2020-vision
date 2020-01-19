@@ -1,9 +1,12 @@
 mod control_panel;
+mod extraction;
+mod analysis;
+
 use control_panel::ControlPanelTracker;
 use standard_vision::types::{CameraConfig, Pose};
 
 fn main() {
-    let b = ControlPanelTracker{};
+    let b = ControlPanelTracker {};
     let config = CameraConfig { // config for c920
         id: 0,
         resolution: (1080, 720),
@@ -17,5 +20,6 @@ fn main() {
         focal_length: 3.67,
         sensor_height: 3.6,
     };
+
     b.detect_color(config)
 }
