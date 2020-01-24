@@ -1,9 +1,12 @@
 mod control_panel;
 mod extraction;
 mod analysis;
+mod chessboard;
 
 use control_panel::ControlPanelTracker;
 use standard_vision::types::{CameraConfig, Pose};
+use chessboard::find_chessboard;
+
 
 fn main() {
     let b = ControlPanelTracker {};
