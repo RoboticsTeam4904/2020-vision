@@ -1,6 +1,6 @@
-mod control_panel;
-mod extraction;
-mod analysis;
+// mod control_panel;
+// mod extraction;
+// mod analysis;
 mod chessboard;
 
 use control_panel::ControlPanelTracker;
@@ -24,5 +24,8 @@ fn main() {
         sensor_height: 3.6,
     };
 
-    b.detect_color(config)
+    let mut camera = OpenCVCamera::new_from_index(0, config.pose, config.fov, config.focal_length, config.sensor_height).unwrap();
+    let image = camera.grab_frame().unwrap();
+    let image_mat: Mat = image.as_mat();
+
 }

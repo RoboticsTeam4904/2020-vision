@@ -1,20 +1,18 @@
+use crate::extraction::HighPortContourExtractor;
+
 use opencv::{
-    calib3d::find_chessboard_corners;
+    core::{Mat, Size},
+    calib3d::{CALIB_CB_FAST_CHECK, find_chessboard_corners},
+    types::VectorOfPoint2f,
+};
+
+use standard_vision::{
+    traits::ImageData,
+    types::Image,
+};
+
+pub fn b<I: ImageData(image: &Image<I>) {
+    let board_size = Size::new(7, 7);
+    let mut corners = VectorOfPoint2f::new();
+    find_chessboard_corners(image, board_size, corners, CALIB_CB_FAST_CHECK); 
 }
-
-// find outside corners  
-
-pub fn find_chessboard (
-    image: &dyn ToInputArray, 
-    // image goes to find outside corners
-    // find oustide corners gives output of corners array
-    // using image and output corners pass it into find_chesboard_corners
-    // return the corners from the find_chessboard_corners
-    pattern_size: Size, 
-    let corners =
-    corners: &mut dyn ToOutputArray, 
-    flags: i32
-) -> Result<bool>
-
-
-
