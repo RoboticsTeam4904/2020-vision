@@ -11,7 +11,7 @@ use opencv::{
 };
 use stdvis_core::{
     traits::Camera,
-    types::{CameraConfig, Pose},
+    types::Pose,
 };
 use stdvis_opencv::camera::OpenCVCamera;
 
@@ -31,8 +31,8 @@ fn main() {
     )
     .unwrap();
 
-    const CHESS_WIDTH: f32 = 123.;
-    const CHESS_HEIGHT: f32 = 77.;
+    const CHESS_WIDTH: f32 = 123. / 1000.;
+    const CHESS_HEIGHT: f32 = 77. / 1000.;
 
     let mut obj_points = VectorOfPoint3f::new();
     let config = camera.config();
@@ -42,9 +42,9 @@ fn main() {
     for i in 0..board_size.height {
         for j in 0..board_size.width {
             obj_points.push(Point3f::new(
-                CHESS_WIDTH / 2. - CHESS_WIDTH * j as f32 / (board_size.width - 1) as f32,
-                CHESS_HEIGHT / 2. - CHESS_HEIGHT * i as f32 / (board_size.height - 1) as f32,
-                distance.clone(),
+                CHESS_WIDTH / (board_size.width - 1) as f32 * j as f32,
+                CHESS_HEIGHT / (board_size.height - 1) as f32 * i as f32,
+                0.,
             ));
         }
     }
