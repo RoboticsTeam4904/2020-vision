@@ -7,12 +7,6 @@ use stdvis_opencv::{camera::OpenCVCamera, convert::AsMatView};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
-#[derive(Default, Serialize, Deserialize)]
-struct Input {
-    config: CameraConfig,
-    target: Target,
-}
-
 #[derive(Serialize, Deserialize)]
 struct Metadata {
     images: Vec<ImageMetadata>,
@@ -26,31 +20,31 @@ struct ImageMetadata {
 }
 
 fn main() {
-    const IN_FILE: &str = "input.json";
+    const IN_FILE: &str = "sample-pose.json";
     const OUT_PATH: &str = "sample-images";
     const METADATA_FILE: &str = "sample-images/metadata.json";
 
-    let mut input_file = fs::OpenOptions::new()
+    let mut target_file = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .open(IN_FILE)
         .unwrap();
 
-    let mut input_str = String::new();
-    input_file.read_to_string(&mut input_str).unwrap();
+    let mut target_str = String::new();
+    target_file.read_to_string(&mut target_str).unwrap();
 
-    let input: Input = match serde_json::from_str(&input_str) {
-        Ok(input) => input,
+    let target: Target = match serde_json::from_str(&target_str) {
+        Ok(target) => target,
         Err(_) => {
-            serde_json::to_writer_pretty(input_file, &Input::default()).unwrap();
+            serde_json::to_writer_pretty(target_file, &Target::default()).unwrap();
 
             println!("Please configure camera config and target parameters.");
             return;
         }
     };
 
-    let config = input.config;
+    let config = target.camera.as_ref().clone();
 
     let mut cam = OpenCVCamera::new(
         config.id,
@@ -84,8 +78,8 @@ fn main() {
     let mut metadata =
         serde_json::from_str(&metadata_str).unwrap_or(Metadata { images: Vec::new() });
 
-    let args = env::args().collect::<Vec<_>>();
-    let label = args.get(1).unwrap();
+    let mut args = env::args().skip(1);
+    let label = args.next().expect("Expected a named image label");
 
     for idx in 0..10 {
         let frame = cam.grab_frame().unwrap();
@@ -100,7 +94,7 @@ fn main() {
         let index = metadata.images.len();
 
         metadata.images.push(ImageMetadata {
-            index: idx,
+            index,
             label: label.clone(),
             config: (*cam.config()).clone(),
         });
