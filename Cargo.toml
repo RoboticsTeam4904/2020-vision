@@ -6,5 +6,7 @@ edition = "2018"
 
 [dependencies]
 opencv = { version = "0.29", default-features = false, features = ["opencv-4"] }
-standard-vision = { git = "https://github.com/roboticsteam4904/standard-vision" }
-opencv-camera = { git = "https://github.com/roboticsteam4904/standard-vision" }
+stdvis-core = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
+stdvis-opencv = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
