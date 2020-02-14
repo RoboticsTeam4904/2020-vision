@@ -4,12 +4,12 @@ use opencv::{
     core::Point,
     imgproc,
     prelude::*,
-    types::{VectorOfPoint, VectorOfVectorOfPoint, VectorOfVec4i},
+    types::{VectorOfPoint, VectorOfVec4i, VectorOfVectorOfPoint},
 };
 
 use stdvis_core::{
     traits::{ContourExtractor, ImageData},
-    types::{Contour, ContourGroup, Image},
+    types::{CameraConfig, Contour, ContourGroup, Image},
 };
 
 use stdvis_opencv::convert::AsMatView;
@@ -187,7 +187,7 @@ impl RFTapeContourExtractor {
             .iter()
             .map(|point| (point.x as u32, point.y as u32))
             .collect::<Vec<_>>();
-        
+
         if is_clockwise {
             points.rotate_right(num_points - first_idx - 1);
             points.reverse();
@@ -198,21 +198,23 @@ impl RFTapeContourExtractor {
         Contour { points }
     }
 
-    fn extract_matching_contours<'a, F>(
-        &'a self,
-        contour_groups: &'a Vec<VectorOfVectorOfPoint>,
+    fn extract_matching_contours<'src, F>(
+        &'src self,
+        contour_groups: &Vec<VectorOfVectorOfPoint>,
+        camera: &'src CameraConfig,
         id: u8,
         target_num_vertices: usize,
         filter_predicate: F,
-    ) -> impl Iterator<Item = ContourGroup> + 'a
+    ) -> Vec<ContourGroup<'src>>
     where
-        F: FnMut(&&VectorOfVectorOfPoint) -> bool + 'a,
+        F: FnMut(&&VectorOfVectorOfPoint) -> bool,
     {
         contour_groups
             .iter()
             .filter(filter_predicate)
             .map(move |contours| ContourGroup {
                 id,
+                camera,
                 contours: contours
                     .iter()
                     .map(|contour| {
@@ -220,26 +222,35 @@ impl RFTapeContourExtractor {
                     })
                     .collect(),
             })
+            .collect()
     }
 }
 
 impl ContourExtractor for RFTapeContourExtractor {
-    fn extract_from<I: ImageData>(&self, image: &Image<I>) -> Vec<ContourGroup> {
+    fn extract_from<'src, I: ImageData>(
+        &'src self,
+        image: &Image<'src, I>,
+    ) -> Vec<ContourGroup<'src>> {
         let image_mat = image.as_mat_view();
 
         let thresholded_image = self.threshold_image(&image_mat);
         let contour_groups = self.find_contours(&thresholded_image);
 
-        let high_port_contours = self.extract_matching_contours(&contour_groups, 0, 8, |contours| {
-            self.filter_high_port(contours)
-        });
+        let high_port_contours =
+            self.extract_matching_contours(&contour_groups, image.camera, 0, 8, |contours| {
+                self.filter_high_port(contours)
+            });
 
         let loading_port_contours =
-            self.extract_matching_contours(&contour_groups, 1, 4, |contours| {
+            self.extract_matching_contours(&contour_groups, image.camera, 1, 4, |contours| {
                 self.filter_loading_port(contours)
             });
 
-        high_port_contours.chain(loading_port_contours).collect()
+        let mut grouped_contours = Vec::new();
+        grouped_contours.extend(high_port_contours);
+        grouped_contours.extend(loading_port_contours);
+
+        grouped_contours
     }
 }
 
@@ -247,13 +258,14 @@ impl ContourExtractor for RFTapeContourExtractor {
 mod tests {
     use super::*;
 
-    use std::{rc::Rc, time};
+    use std::time;
 
     use stdvis_core::types::CameraConfig;
     use stdvis_opencv::camera::MatImageData;
 
     #[test]
     fn test_contour_matching() {
+        use ndarray::prelude::*;
         use opencv::imgcodecs;
         use std::fs;
 
@@ -268,9 +280,10 @@ mod tests {
             let image_mat =
                 imgcodecs::imread(image_path.to_str().unwrap(), imgcodecs::IMREAD_COLOR).unwrap();
 
+            let config = CameraConfig::default();
             let image = Image::new(
                 time::SystemTime::now(),
-                Rc::new(CameraConfig::default()),
+                &config,
                 MatImageData::new(image_mat),
             );
 

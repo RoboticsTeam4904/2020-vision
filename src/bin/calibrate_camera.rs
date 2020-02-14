@@ -40,9 +40,7 @@ fn calculate_obj_points(square_size: f32, width: u8, height: u8) -> Vec<Point3f>
 fn main() {
     let mut args = env::args().skip(1);
 
-    let config_path = args
-        .next()
-        .expect("Expected config path as first arg");
+    let config_path = args.next().expect("Expected config path as first arg");
 
     let image_paths = args.collect::<Vec<_>>();
 
@@ -71,11 +69,11 @@ fn main() {
     };
 
     let num_images = image_paths.len();
-    let template_obj_points =
-        calculate_obj_points(config.square_size_mm / 1000., config.board_rows, config.board_cols);
-
-    // let mut image_points = Vec::<Mat>::new();
-    // let mut image_points = VectorOfMat::new();
+    let template_obj_points = calculate_obj_points(
+        config.square_size_mm / 1000.,
+        config.board_rows,
+        config.board_cols,
+    );
 
     let mut obj_points = Vec::<VectorOfPoint3f>::with_capacity(num_images);
     let mut img_points = Vec::<VectorOfPoint2f>::with_capacity(num_images);
@@ -126,11 +124,17 @@ fn main() {
     )
     .unwrap();
 
-    println!("intrinsic matrix");
-    println!("{:?}", camera_matrix.as_array_view::<f64>());
+    config.camera.intrinsic_matrix = camera_matrix
+        .as_array_view::<f64>()
+        .into_shape((3, 3))
+        .unwrap()
+        .to_owned();
 
-    println!("distortion coefficients");
-    println!("{:?}", dist_coeffs.as_array_view::<f64>());
+    config.camera.distortion_coeffs = camera_matrix
+        .as_array_view::<f64>()
+        .into_shape(5)
+        .unwrap()
+        .to_owned();
 
     let config_file = fs::OpenOptions::new()
         .truncate(true)
