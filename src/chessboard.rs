@@ -1,7 +1,5 @@
 use opencv::{
-    calib3d::{
-        draw_chessboard_corners, find_chessboard_corners_sb, rodrigues, solve_pnp, CALIB_CB_FAST_CHECK,
-    },
+    calib3d::{draw_chessboard_corners, find_chessboard_corners_sb, rodrigues, solve_pnp},
     core::{Mat, Size},
     imgcodecs::{imwrite, IMWRITE_JPEG_QUALITY},
     prelude::*,
@@ -10,7 +8,7 @@ use opencv::{
 
 use stdvis_core::{
     traits::ImageData,
-    types::{CameraConfig, Image},
+    types::{CameraConfig, Image, Target},
 };
 
 use stdvis_opencv::convert::{AsArrayView, AsMatView};
@@ -43,16 +41,27 @@ pub fn find_chessboard<I: ImageData>(
 
     let mut rvec = Mat::default().unwrap();
     let mut tvec_mat = Mat::default().unwrap();
-    let dist_coeffs = Mat::default().unwrap();
+    // let dist_coeffs = Mat::default().unwrap();
+    let dist_coeffs = Mat::from_slice(&[
+        0.16882939064608002,
+        -0.9243844884626233,
+        0.006368686931626428,
+        0.0055936556910287875,
+        2.0772772661977683,
+    ])
+    .unwrap();
 
-    let fx = config.focal_length * config.resolution.0 as f64 / config.sensor_width;
-    let fy = config.focal_length * config.resolution.1 as f64 / config.sensor_height;
-
-    // let fx = config.resolution.0 as f64 / config.sensor_width;
-    // let fy = config.resolution.1 as f64 / config.sensor_height;
-    let cx = config.resolution.0 as f64 / 2.;
-    let cy = config.resolution.1 as f64 / 2.;
-    let camera_mat = Mat::from_slice_2d(&[[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]]).unwrap();
+    // let fx = config.focal_length * config.resolution.0 as f64 / config.sensor_width;
+    // let fy = config.focal_length * config.resolution.1 as f64 / config.sensor_height;
+    // let cx = config.resolution.0 as f64 / 2.;
+    // let cy = config.resolution.1 as f64 / 2.;
+    // let camera_mat = Mat::from_slice_2d(&[[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]]).unwrap();
+    let camera_mat = Mat::from_slice_2d(&[
+        [1449.6970632013845, 0.0, 919.7416002537354],
+        [0.0, 1456.6938719499683, 549.6275213145884],
+        [0.0, 0.0, 1.0],
+    ])
+    .unwrap();
 
     solve_pnp(
         &obj_points,
@@ -62,7 +71,7 @@ pub fn find_chessboard<I: ImageData>(
         &mut rvec,
         &mut tvec_mat,
         false,
-        opencv::calib3d::SOLVEPNP_EPNP,
+        opencv::calib3d::SOLVEPNP_IPPE,
     )
     .unwrap();
 
@@ -88,20 +97,27 @@ pub fn find_chessboard<I: ImageData>(
 
     let camera_pose = rmat_trans.dot(&tvec);
 
+    let x = camera_pose[[0, 0]];
+    let y = camera_pose[[1, 0]];
+    let z = camera_pose[[2, 0]];
+
+    let theta = x.atan2(z);
+
     let r00 = rmat[[0, 0]];
     let r10 = rmat[[1, 0]];
     let r20 = rmat[[2, 0]];
     let r21 = rmat[[2, 1]];
     let r22 = rmat[[2, 2]];
 
-    let roll = r10.atan2(r00); // actually roll
+    let roll = r10.atan2(r00);
     let pitch = -r20.atan2((r21.powf(2.) + r22.powf(2.)).sqrt());
-    let yaw = r21.atan2(r22); // actually yaw
+    let yaw = r21.atan2(r22);
 
     println!("---");
-    println!("yaw: {}", yaw.to_degrees());
-    println!("pitch: {}", pitch.to_degrees());
-    println!("roll: {}", roll.to_degrees());
+    println!("theta {}", theta.to_degrees());
+    println!("beta: {}", yaw.to_degrees());
+    println!("dist away: {}", z);
+    println!("dist up: {}", y);
 
     imwrite("chess_corners.jpg", &image_mat, &flag).unwrap();
 }
