@@ -42,8 +42,8 @@ fn main() {
     for i in 0..board_size.height {
         for j in 0..board_size.width {
             obj_points.push(Point3f::new(
-                CHESS_WIDTH / (board_size.width - 1) as f32 * j as f32,
-                CHESS_HEIGHT / (board_size.height - 1) as f32 * i as f32,
+                CHESS_WIDTH / (board_size.width - 1) as f32 * j as f32 - CHESS_WIDTH * 0.5,
+                CHESS_HEIGHT / (board_size.height - 1) as f32 * i as f32 - CHESS_HEIGHT * 0.5,
                 0.,
             ));
         }
