@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use opencv::{
-    core::Point,
+    core::{Point, Size},
     imgproc,
     prelude::*,
     types::{VectorOfPoint, VectorOfVec4i, VectorOfVectorOfPoint},
@@ -14,7 +14,26 @@ use stdvis_core::{
 
 use stdvis_opencv::convert::AsMatView;
 
-pub(crate) struct RFTapeContourExtractor {}
+pub(crate) struct RFTapeContourExtractor {
+    morph_elem: Mat,
+}
+
+impl RFTapeContourExtractor {
+    pub fn new() -> Self {
+        const MORPH_KERNEL_SIZE: i32 = 1;
+        const MORPH_SHAPE: i32 = imgproc::MORPH_RECT;
+
+        let morph_elem = imgproc::get_structuring_element(
+            MORPH_SHAPE,
+            Size::new(MORPH_KERNEL_SIZE * 2 + 1, MORPH_KERNEL_SIZE * 2 + 1),
+            Point::new(MORPH_KERNEL_SIZE, MORPH_KERNEL_SIZE),
+        ).unwrap();
+
+        Self {
+            morph_elem,
+        }
+    }
+}
 
 impl RFTapeContourExtractor {
     fn threshold_image(&self, image: &Mat) -> Mat {
@@ -32,7 +51,29 @@ impl RFTapeContourExtractor {
         )
         .unwrap();
 
-        thresholded_image
+        let mut dilated_image = Mat::default().unwrap();
+        imgproc::dilate(
+            &thresholded_image,
+            &mut dilated_image,
+            &self.morph_elem,
+            Point::new(-1, -1),
+            1,
+            opencv::core::BORDER_CONSTANT,
+            imgproc::morphology_default_border_value().unwrap(),
+        ).unwrap();
+
+        let mut eroded_image = Mat::default().unwrap();
+        imgproc::erode(
+            &dilated_image,
+            &mut eroded_image,
+            &self.morph_elem,
+            Point::new(-1, -1),
+            1,
+            opencv::core::BORDER_CONSTANT,
+            imgproc::morphology_default_border_value().unwrap(),
+        ).unwrap();
+
+        eroded_image
     }
 
     fn find_contours(&self, image: &Mat) -> Vec<VectorOfVectorOfPoint> {
