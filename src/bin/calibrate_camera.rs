@@ -52,7 +52,7 @@ fn main() {
         .read(true)
         .write(true)
         .create(true)
-        .open(config_path)
+        .open(&config_path)
         .unwrap();
 
     let mut config_str = String::new();
@@ -130,7 +130,7 @@ fn main() {
         .unwrap()
         .to_owned();
 
-    config.camera.distortion_coeffs = camera_matrix
+    config.camera.distortion_coeffs = dist_coeffs
         .as_array_view::<f64>()
         .into_shape(5)
         .unwrap()
@@ -139,7 +139,7 @@ fn main() {
     let config_file = fs::OpenOptions::new()
         .truncate(true)
         .write(true)
-        .open("sample-images/metadata.json")
+        .open(&config_path)
         .unwrap();
 
     serde_json::to_writer_pretty(config_file, &config).unwrap();
