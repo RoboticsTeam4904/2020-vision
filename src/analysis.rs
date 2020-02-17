@@ -112,10 +112,10 @@ impl WallTapeContourAnalyzer {
 
         Target {
             id,
-            theta,
-            beta: yaw,
-            dist: z,
-            height: y,
+            theta: theta + config.pose.angle,
+            beta: yaw + config.pose.angle,
+            dist: config.pose.angle.cos() * config.pose.dist + config.pose.yaw.cos() * z - config.pose.yaw.sin() * x,
+            height: y + config.pose.height,
             confidence: 0.,
         }
     }
