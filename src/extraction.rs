@@ -27,11 +27,10 @@ impl RFTapeContourExtractor {
             MORPH_SHAPE,
             Size::new(MORPH_KERNEL_SIZE * 2 + 1, MORPH_KERNEL_SIZE * 2 + 1),
             Point::new(MORPH_KERNEL_SIZE, MORPH_KERNEL_SIZE),
-        ).unwrap();
+        )
+        .unwrap();
 
-        Self {
-            morph_elem,
-        }
+        Self { morph_elem }
     }
 }
 
@@ -60,7 +59,8 @@ impl RFTapeContourExtractor {
             1,
             opencv::core::BORDER_CONSTANT,
             imgproc::morphology_default_border_value().unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut eroded_image = Mat::default().unwrap();
         imgproc::erode(
@@ -71,7 +71,8 @@ impl RFTapeContourExtractor {
             1,
             opencv::core::BORDER_CONSTANT,
             imgproc::morphology_default_border_value().unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         eroded_image
     }
@@ -119,8 +120,31 @@ impl RFTapeContourExtractor {
             .collect()
     }
 
+    fn calc_solidity(&self, contour: &VectorOfPoint, hull: Option<&VectorOfPoint>) -> f64 {
+        let contour_area = imgproc::contour_area(&contour, false).unwrap();
+
+        let hull_area = match hull {
+            None => {
+                let mut hull_contour = VectorOfPoint::new();
+                imgproc::convex_hull(&contour, &mut hull_contour, true, false).unwrap();
+                imgproc::contour_area(&hull_contour, false).unwrap()
+            }
+            Some(hull_contour) => imgproc::contour_area(&hull_contour, false).unwrap(),
+        };
+
+        contour_area / hull_area
+    }
+
+    fn calc_aspect_ratio(&self, contour: &VectorOfPoint) -> f32 {
+        let rect = imgproc::min_area_rect(&contour).unwrap();
+        let rect_size = rect.size().unwrap();
+
+        rect_size.width / rect_size.height
+    }
+
     fn filter_high_port(&self, contours: &VectorOfVectorOfPoint) -> bool {
         const SOLIDITY_RANGE: Range<f64> = 0.15..0.25;
+        const ASPECT_RATIO_RANGE: Range<f32> = 1.50..2.50;
 
         if contours.len() != 1 {
             return false;
@@ -128,15 +152,11 @@ impl RFTapeContourExtractor {
 
         let external_contour = contours.get(0).unwrap();
 
-        let mut hull_contour = VectorOfPoint::new();
-        imgproc::convex_hull(&external_contour, &mut hull_contour, true, false).unwrap();
+        if !SOLIDITY_RANGE.contains(&self.calc_solidity(&external_contour, None)) {
+            return false;
+        }
 
-        let contour_area = imgproc::contour_area(&external_contour, false).unwrap();
-        let hull_area = imgproc::contour_area(&hull_contour, false).unwrap();
-
-        let solidity = contour_area / hull_area;
-
-        if !SOLIDITY_RANGE.contains(&solidity) {
+        if !ASPECT_RATIO_RANGE.contains(&self.calc_aspect_ratio(&external_contour)) {
             return false;
         }
 
@@ -154,27 +174,23 @@ impl RFTapeContourExtractor {
         let external_contour = contours.get(0).unwrap();
         let internal_contour = contours.get(1).unwrap();
 
-        let external_area = imgproc::contour_area(&external_contour, false).unwrap();
-        let internal_area = imgproc::contour_area(&internal_contour, false).unwrap();
-
-        let solidity = internal_area / external_area;
-
-        if !SOLIDITY_RANGE.contains(&solidity) {
+        if !SOLIDITY_RANGE.contains(&self.calc_solidity(&internal_contour, Some(&external_contour)))
+        {
             return false;
         }
 
-        let rect = imgproc::min_area_rect(&external_contour).unwrap();
-        let rect_size = rect.size().unwrap();
-        let aspect_ratio = rect_size.width / rect_size.height;
-
-        if !ASPECT_RATIO_RANGE.contains(&aspect_ratio) {
+        if !ASPECT_RATIO_RANGE.contains(&self.calc_aspect_ratio(&external_contour)) {
             return false;
         }
 
         true
     }
 
-    fn find_vertices(&self, target_num_vertices: usize, contour: &VectorOfPoint) -> VectorOfPoint {
+    fn find_vertices(
+        &self,
+        target_num_vertices: usize,
+        contour: &VectorOfPoint,
+    ) -> Option<VectorOfPoint> {
         let mut poly_contour = VectorOfPoint::new();
         let mut epsilon = 0.0;
 
@@ -182,8 +198,11 @@ impl RFTapeContourExtractor {
             epsilon += 0.01;
             imgproc::approx_poly_dp(&contour, &mut poly_contour, epsilon, true).unwrap();
 
-            if poly_contour.len() <= target_num_vertices {
-                break poly_contour;
+            if poly_contour.len() == target_num_vertices {
+                break Some(poly_contour);
+            } else if poly_contour.len() < target_num_vertices {
+                // Failed to coerce the contour to the target number of vertices.
+                break None;
             }
         }
     }
@@ -239,6 +258,25 @@ impl RFTapeContourExtractor {
         Contour { points }
     }
 
+    fn normalize_contours(
+        &self,
+        contours: &VectorOfVectorOfPoint,
+        target_num_vertices: usize,
+    ) -> Option<Vec<Contour>> {
+        let normalized_contours = contours
+            .iter()
+            .filter_map(|contour| {
+                self.find_vertices(target_num_vertices, &contour)
+                    .map(|verts| self.order_vertices(&verts))
+            })
+            .collect::<Vec<_>>();
+
+        match normalized_contours.len() {
+            0 => None,
+            _ => Some(normalized_contours),
+        }
+    }
+
     fn extract_matching_contours<'src, F>(
         &'src self,
         contour_groups: &Vec<VectorOfVectorOfPoint>,
@@ -253,15 +291,11 @@ impl RFTapeContourExtractor {
         contour_groups
             .iter()
             .filter(filter_predicate)
+            .filter_map(|contours| self.normalize_contours(contours, target_num_vertices))
             .map(move |contours| ContourGroup {
                 id,
                 camera,
-                contours: contours
-                    .iter()
-                    .map(|contour| {
-                        self.order_vertices(&self.find_vertices(target_num_vertices, &contour))
-                    })
-                    .collect(),
+                contours,
             })
             .collect()
     }

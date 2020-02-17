@@ -6,7 +6,7 @@ use opencv::{
 };
 
 use stdvis_core::{
-    traits::{ContourAnalyzer},
+    traits::ContourAnalyzer,
     types::{CameraConfig, ContourGroup, Target},
 };
 
@@ -33,21 +33,31 @@ const LOADING_PORT_OBJECT_POINTS: &[(f32, f32)] = &[
     (0.0381, -0.0889),
 ];
 
-const CV_HIGH_PORT_OBJECT_POINTS: VectorOfPoint3f = VectorOfPoint3f::from_iter(
-    HIGH_PORT_OBJECT_POINTS
-        .iter()
-        .map(|point| Point3f::new(point.0, point.1, 0.)),
-);
-
-const CV_LOADING_PORT_OBJECT_POINTS: VectorOfPoint3f = VectorOfPoint3f::from_iter(
-    LOADING_PORT_OBJECT_POINTS
-        .iter()
-        .map(|point| Point3f::new(point.0, point.1, 0.)),
-);
-
-pub struct WallTapeContourAnalyzer {}
+pub struct WallTapeContourAnalyzer {
+    high_port_object_points: VectorOfPoint3f,
+    loading_port_object_points: VectorOfPoint3f,
+}
 
 impl WallTapeContourAnalyzer {
+    pub fn new() -> Self {
+        let high_port_object_points = VectorOfPoint3f::from_iter(
+            HIGH_PORT_OBJECT_POINTS
+                .iter()
+                .map(|point| Point3f::new(point.0, point.1, 0.)),
+        );
+
+        let loading_port_object_points = VectorOfPoint3f::from_iter(
+            LOADING_PORT_OBJECT_POINTS
+                .iter()
+                .map(|point| Point3f::new(point.0, point.1, 0.)),
+        );
+
+        WallTapeContourAnalyzer {
+            high_port_object_points,
+            loading_port_object_points,
+        }
+    }
+
     pub fn find_target(
         &self,
         id: u8,
@@ -55,7 +65,7 @@ impl WallTapeContourAnalyzer {
         obj_points: &VectorOfPoint3f,
         config: &CameraConfig,
     ) -> Target {
-        let mut rvec = Mat::default().unwrap();
+        let mut rvec_mat = Mat::default().unwrap();
         let mut tvec_mat = Mat::default().unwrap();
 
         let intrinsic_matrix = config.intrinsic_matrix.as_mat_view();
@@ -66,7 +76,7 @@ impl WallTapeContourAnalyzer {
             &img_points,
             &*intrinsic_matrix,
             &*dist_coeffs,
-            &mut rvec,
+            &mut rvec_mat,
             &mut tvec_mat,
             false,
             opencv::calib3d::SOLVEPNP_IPPE,
@@ -76,13 +86,13 @@ impl WallTapeContourAnalyzer {
         let mut rmat_mat = Mat::default().unwrap();
         let mut jacobian_mat = Mat::default().unwrap();
 
-        rodrigues(&rvec, &mut rmat_mat, &mut jacobian_mat).unwrap();
+        rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat).unwrap();
 
         let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1)).unwrap();
         let rmat = rmat_mat.as_array_view::<f64>().into_shape((3, 3)).unwrap();
-        let rmat_trans = rmat.t();
+        let rmat_t = rmat.t();
 
-        let camera_pose = rmat_trans.dot(&tvec);
+        let camera_pose = rmat_t.dot(&tvec);
 
         let x = camera_pose[[0, 0]];
         let y = camera_pose[[1, 0]];
@@ -101,12 +111,12 @@ impl WallTapeContourAnalyzer {
         let yaw = r21.atan2(r22);
 
         Target {
-            id: id,
-            theta: theta,
+            id,
+            theta,
             beta: yaw,
             dist: z,
             height: y,
-            confidence: 69.,
+            confidence: 0.,
         }
     }
 }
@@ -114,11 +124,11 @@ impl WallTapeContourAnalyzer {
 impl ContourAnalyzer for WallTapeContourAnalyzer {
     fn analyze(&self, contour_group: &ContourGroup) -> Target {
         let obj_points = match contour_group.id {
-            0 => CV_HIGH_PORT_OBJECT_POINTS,
-            1 => CV_LOADING_PORT_OBJECT_POINTS,
+            0 => &self.high_port_object_points,
+            1 => &self.loading_port_object_points,
+            _ => panic!("Unknown contour group type"),
         };
 
-        let mut targets = Vec::<Target>::with_capacity(contour_group.contours.len());
         let img_points = VectorOfPoint2f::from_iter(
             contour_group
                 .contours
