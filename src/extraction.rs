@@ -7,12 +7,124 @@ use opencv::{
     types::{VectorOfPoint, VectorOfPoint2f, VectorOfVec4i, VectorOfVectorOfPoint},
 };
 
+#[cfg(feature = "opencl")]
+use opencv::core::UMat;
+
 use stdvis_core::{
     traits::{ContourExtractor, ImageData},
-    types::{Contour, ContourGroup, Image},
+    types::{CameraConfig, Contour, ContourGroup, Image},
 };
 
-use stdvis_opencv::convert::{AsMatView, MatView};
+use stdvis_opencv::convert::AsMatView;
+
+#[cfg(feature = "opencl")]
+type SomeMat = UMat;
+
+#[cfg(not(any(feature = "opencl")))]
+type SomeMat = Mat;
+
+#[cfg(feature = "opencl")]
+fn default_mat() -> opencv::Result<UMat> {
+    UMat::new(opencv::core::UMatUsageFlags::USAGE_DEFAULT)
+}
+
+#[cfg(not(any(feature = "opencl")))]
+fn default_mat() -> opencv::Result<Mat> {
+    Mat::default()
+}
+
+trait RFTapeTarget {
+    const TYPE: u8;
+    const NUM_VERTICES: usize;
+
+    fn calc_solidity(contour: &VectorOfPoint, hull: Option<&VectorOfPoint>) -> f64 {
+        let contour_area = imgproc::contour_area(&contour, false).unwrap();
+
+        let hull_area = match hull {
+            None => {
+                let mut hull_contour = VectorOfPoint::new();
+                imgproc::convex_hull(&contour, &mut hull_contour, true, false).unwrap();
+                imgproc::contour_area(&hull_contour, false).unwrap()
+            }
+            Some(hull_contour) => imgproc::contour_area(&hull_contour, false).unwrap(),
+        };
+
+        contour_area / hull_area
+    }
+
+    fn calc_aspect_ratio(contour: &VectorOfPoint) -> f32 {
+        let rect = imgproc::min_area_rect(&contour).unwrap();
+        let rect_size = rect.size().unwrap();
+
+        rect_size.width / rect_size.height
+    }
+
+    fn filter(contours: &VectorOfVectorOfPoint) -> bool;
+}
+
+struct HighPortTarget;
+
+impl HighPortTarget {
+    const SOLIDITY_RANGE: Range<f64> = 0.10..0.25;
+    const ASPECT_RATIO_RANGE: Range<f32> = 0.00..2.50;
+}
+
+impl RFTapeTarget for HighPortTarget {
+    const TYPE: u8 = 0;
+    const NUM_VERTICES: usize = 8;
+
+    fn filter(contours: &VectorOfVectorOfPoint) -> bool {
+        if contours.len() != 1 {
+            return false;
+        }
+
+        let external_contour = contours.get(0).unwrap();
+
+        if !Self::SOLIDITY_RANGE.contains(&Self::calc_solidity(&external_contour, None)) {
+            return false;
+        }
+
+        if !Self::ASPECT_RATIO_RANGE.contains(&Self::calc_aspect_ratio(&external_contour)) {
+            return false;
+        }
+
+        true
+    }
+}
+
+struct LoadingPortTarget;
+
+impl LoadingPortTarget {
+    const SOLIDITY_RANGE: Range<f64> = 0.25..0.50;
+    const ASPECT_RATIO_RANGE: Range<f32> = 1.40..1.60;
+}
+
+impl RFTapeTarget for LoadingPortTarget {
+    const TYPE: u8 = 1;
+    const NUM_VERTICES: usize = 4;
+
+    fn filter(contours: &VectorOfVectorOfPoint) -> bool {
+        if contours.len() != 2 {
+            return false;
+        }
+
+        let external_contour = contours.get(0).unwrap();
+        let internal_contour = contours.get(1).unwrap();
+
+        if !Self::SOLIDITY_RANGE.contains(&Self::calc_solidity(
+            &internal_contour,
+            Some(&external_contour),
+        )) {
+            return false;
+        }
+
+        if !Self::ASPECT_RATIO_RANGE.contains(&Self::calc_aspect_ratio(&external_contour)) {
+            return false;
+        }
+
+        true
+    }
+}
 
 pub(crate) struct RFTapeContourExtractor {
     morph_elem: Mat,
@@ -46,13 +158,13 @@ impl RFTapeContourExtractor {
 }
 
 impl RFTapeContourExtractor {
-    fn threshold_image(&self, image: &Mat) -> Mat {
-        const RFTAPE_HSV_RANGE: Range<[u8; 3]> = [50, 50, 125]..[94, 255, 255];
+    pub fn threshold_image(&self, image: &SomeMat) -> SomeMat {
+        const RFTAPE_HSV_RANGE: Range<[u8; 3]> = [50, 50, 50]..[94, 255, 255];
 
-        let mut hsv_image = Mat::default().unwrap();
+        let mut hsv_image = default_mat().unwrap();
         imgproc::cvt_color(&image, &mut hsv_image, imgproc::COLOR_BGR2HSV, 0).unwrap();
 
-        let mut thresholded_image = Mat::default().unwrap();
+        let mut thresholded_image = default_mat().unwrap();
         opencv::core::in_range(
             &hsv_image,
             &Mat::from_slice(&RFTAPE_HSV_RANGE.start).unwrap(),
@@ -61,7 +173,7 @@ impl RFTapeContourExtractor {
         )
         .unwrap();
 
-        let mut dilated_image = Mat::default().unwrap();
+        let mut dilated_image = default_mat().unwrap();
         imgproc::dilate(
             &thresholded_image,
             &mut dilated_image,
@@ -73,7 +185,7 @@ impl RFTapeContourExtractor {
         )
         .unwrap();
 
-        let mut eroded_image = Mat::default().unwrap();
+        let mut eroded_image = default_mat().unwrap();
         imgproc::erode(
             &dilated_image,
             &mut eroded_image,
@@ -88,7 +200,7 @@ impl RFTapeContourExtractor {
         eroded_image
     }
 
-    fn find_contours(&self, image: &Mat) -> Vec<VectorOfVectorOfPoint> {
+    fn find_contours(&self, image: &SomeMat) -> Vec<VectorOfVectorOfPoint> {
         let mut contours = VectorOfVectorOfPoint::new();
         let mut hierarchy = VectorOfVec4i::new();
         imgproc::find_contours_with_hierarchy(
@@ -131,72 +243,6 @@ impl RFTapeContourExtractor {
             .collect()
     }
 
-    fn calc_solidity(&self, contour: &VectorOfPoint, hull: Option<&VectorOfPoint>) -> f64 {
-        let contour_area = imgproc::contour_area(&contour, false).unwrap();
-
-        let hull_area = match hull {
-            None => {
-                let mut hull_contour = VectorOfPoint::new();
-                imgproc::convex_hull(&contour, &mut hull_contour, true, false).unwrap();
-                imgproc::contour_area(&hull_contour, false).unwrap()
-            }
-            Some(hull_contour) => imgproc::contour_area(&hull_contour, false).unwrap(),
-        };
-
-        contour_area / hull_area
-    }
-
-    fn calc_aspect_ratio(&self, contour: &VectorOfPoint) -> f32 {
-        let rect = imgproc::min_area_rect(&contour).unwrap();
-        let rect_size = rect.size().unwrap();
-
-        rect_size.width / rect_size.height
-    }
-
-    fn filter_high_port(&self, contours: &VectorOfVectorOfPoint) -> bool {
-        const SOLIDITY_RANGE: Range<f64> = 0.10..0.25;
-        const ASPECT_RATIO_RANGE: Range<f32> = 0.00..2.50;
-
-        if contours.len() != 1 {
-            return false;
-        }
-
-        let external_contour = contours.get(0).unwrap();
-
-        if !SOLIDITY_RANGE.contains(&self.calc_solidity(&external_contour, None)) {
-            return false;
-        }
-
-        if !ASPECT_RATIO_RANGE.contains(&self.calc_aspect_ratio(&external_contour)) {
-            return false;
-        }
-
-        true
-    }
-
-    fn filter_loading_port(&self, contours: &VectorOfVectorOfPoint) -> bool {
-        const SOLIDITY_RANGE: Range<f64> = 0.25..0.50;
-        const ASPECT_RATIO_RANGE: Range<f32> = 1.40..1.60;
-
-        if contours.len() != 2 {
-            return false;
-        }
-
-        let external_contour = contours.get(0).unwrap();
-        let internal_contour = contours.get(1).unwrap();
-
-        if !SOLIDITY_RANGE.contains(&self.calc_solidity(&internal_contour, Some(&external_contour)))
-        {
-            return false;
-        }
-
-        if !ASPECT_RATIO_RANGE.contains(&self.calc_aspect_ratio(&external_contour)) {
-            return false;
-        }
-
-        true
-    }
-
     fn find_vertices(
         &self,
         target_num_vertices: usize,
@@ -206,7 +252,7 @@ impl RFTapeContourExtractor {
         let mut epsilon = 0.0;
 
         loop {
-            epsilon += 0.01;
+            epsilon += 0.1;
             imgproc::approx_poly_dp(&contour, &mut poly_contour, epsilon, true).unwrap();
 
             if poly_contour.len() == target_num_vertices {
@@ -218,7 +264,7 @@ impl RFTapeContourExtractor {
         }
     }
 
-    fn order_vertices(&self, contour: &VectorOfPoint) -> Vec<Point> {
+    fn order_vertices(&self, contour: &VectorOfPoint) -> VectorOfPoint {
         let num_points = contour.len();
         let mut centroid = contour
             .iter()
@@ -242,17 +288,12 @@ impl RFTapeContourExtractor {
         let (first_idx, _) = contour
             .iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| vertex_theta(a).partial_cmp(&vertex_theta(b)).unwrap())
+            .map(|(idx, point)| (idx, vertex_theta(&point)))
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .unwrap();
 
-        let signed_area = (1..=num_points).fold(0, |acc, idx| {
-            let p0 = contour.get(idx - 1).unwrap();
-            let p1 = contour.get(idx % num_points).unwrap();
-
-            acc + (p1.x - p0.x) * (p1.y + p0.y)
-        });
-
-        let is_clockwise = signed_area.is_negative();
+        let signed_area = imgproc::contour_area(contour, true).unwrap();
+        let is_clockwise = signed_area.is_sign_positive();
 
         let mut points = contour.to_vec();
 
@@ -263,17 +304,17 @@ impl RFTapeContourExtractor {
             points.rotate_left(first_idx);
         }
 
-        points
+        VectorOfPoint::from_iter(points)
     }
 
-    fn optimize_contour(&self, contour: &Vec<Point>, image_mat: &Mat) -> Contour {
+    fn refine_vertices(&self, contour: &VectorOfPoint, image_mat: &SomeMat) -> VectorOfPoint2f {
         let mut corners = VectorOfPoint2f::from_iter(
             contour
                 .iter()
                 .map(|point| Point2f::new(point.x as f32, point.y as f32)),
         );
 
-        let mut grayscale_image = Mat::default().unwrap();
+        let mut grayscale_image = default_mat().unwrap();
         imgproc::cvt_color(&image_mat, &mut grayscale_image, imgproc::COLOR_BGR2GRAY, 0).unwrap();
 
         imgproc::corner_sub_pix(
@@ -285,15 +326,18 @@ impl RFTapeContourExtractor {
         )
         .unwrap();
 
-        let points = corners.iter().map(|corner| (corner.x, corner.y)).collect();
+        corners
+    }
 
+    fn convert_contour(&self, contour: &VectorOfPoint2f) -> Contour {
+        let points = contour.iter().map(|point| (point.x, point.y)).collect();
         Contour { points }
     }
 
     fn normalize_contours(
         &self,
         contours: &VectorOfVectorOfPoint,
-        image_mat: MatView,
+        image_mat: &SomeMat,
         target_num_vertices: usize,
     ) -> Option<Vec<Contour>> {
         let normalized_contours = contours
@@ -301,7 +345,8 @@ impl RFTapeContourExtractor {
             .filter_map(|contour| {
                 self.find_vertices(target_num_vertices, &contour)
                     .map(|verts| self.order_vertices(&verts))
-                    .map(|contour| self.optimize_contour(&contour, &*image_mat))
+                    .map(|verts| self.refine_vertices(&verts, image_mat))
+                    .map(|verts| self.convert_contour(&verts))
             })
             .collect::<Vec<_>>();
 
@@ -311,26 +356,19 @@ impl RFTapeContourExtractor {
         }
     }
 
-    fn extract_matching_contours<'src, F, I: ImageData>(
+    fn extract_matching_contours<'src, T: RFTapeTarget>(
         &'src self,
         contour_groups: &Vec<VectorOfVectorOfPoint>,
-        image: &Image<'src, I>,
-        id: u8,
-        target_num_vertices: usize,
-        filter_predicate: F,
-    ) -> Vec<ContourGroup<'src>>
-    where
-        F: FnMut(&&VectorOfVectorOfPoint) -> bool,
-    {
+        image_mat: &SomeMat,
+        camera: &'src CameraConfig,
+    ) -> Vec<ContourGroup<'src>> {
         contour_groups
             .iter()
-            .filter(filter_predicate)
-            .filter_map(|contours| {
-                self.normalize_contours(contours, image.as_mat_view(), target_num_vertices)
-            })
+            .filter(|group| T::filter(group))
+            .filter_map(|contours| self.normalize_contours(contours, image_mat, T::NUM_VERTICES))
             .map(move |contours| ContourGroup {
-                id,
-                camera: image.camera,
+                id: T::TYPE,
+                camera,
                 contours,
             })
             .collect()
@@ -342,20 +380,32 @@ impl ContourExtractor for RFTapeContourExtractor {
         &'src self,
         image: &Image<'src, I>,
     ) -> Vec<ContourGroup<'src>> {
+        #[cfg(feature = "opencl")]
+        let image_mat = image
+            .as_mat_view()
+            .get_umat(
+                opencv::core::AccessFlag::ACCESS_READ,
+                opencv::core::UMatUsageFlags::USAGE_DEFAULT,
+            )
+            .unwrap();
+
+        #[cfg(not(any(feature = "opencl")))]
         let image_mat = image.as_mat_view();
 
         let thresholded_image = self.threshold_image(&image_mat);
         let contour_groups = self.find_contours(&thresholded_image);
 
-        let high_port_contours =
-            self.extract_matching_contours(&contour_groups, image, 0, 8, |contours| {
-                self.filter_high_port(contours)
-            });
+        let high_port_contours = self.extract_matching_contours::<HighPortTarget>(
+            &contour_groups,
+            &image_mat,
+            image.camera,
+        );
 
-        let loading_port_contours =
-            self.extract_matching_contours(&contour_groups, image, 1, 4, |contours| {
-                self.filter_loading_port(contours)
-            });
+        let loading_port_contours = self.extract_matching_contours::<LoadingPortTarget>(
+            &contour_groups,
+            &image_mat,
+            image.camera,
+        );
 
         let mut grouped_contours = Vec::new();
         grouped_contours.extend(high_port_contours);
