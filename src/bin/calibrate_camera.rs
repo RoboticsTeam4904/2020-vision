@@ -58,13 +58,17 @@ fn main() {
     let mut config_str = String::new();
     config_file.read_to_string(&mut config_str).unwrap();
 
+    if config_str.is_empty() {
+        serde_json::to_writer_pretty(config_file, &Config::default()).unwrap();
+
+        println!("Please provide camera configuration and target parameters.");
+        return;
+    }
+
     let mut config: Config = match serde_json::from_str(&config_str) {
         Ok(config) => config,
         Err(_) => {
-            serde_json::to_writer_pretty(config_file, &Config::default()).unwrap();
-
-            println!("Please configure camera config and target parameters.");
-            return;
+            panic!("Failed to parse camera configuration and target parameters. The schema used may be out of date.");
         }
     };
 

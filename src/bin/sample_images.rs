@@ -44,13 +44,17 @@ fn main() {
     let mut params_str = String::new();
     params_file.read_to_string(&mut params_str).unwrap();
 
+    if params_str.is_empty() {
+        serde_json::to_writer_pretty(params_file, &Params::default()).unwrap();
+
+        println!("Please configure input parameters.");
+        return;
+    }
+
     let params: Params = match serde_json::from_str(&params_str) {
         Ok(params) => params,
         Err(_) => {
-            serde_json::to_writer_pretty(params_file, &Params::default()).unwrap();
-
-            println!("Please configure input parameters.");
-            return;
+            panic!("Failed to parse input parameters. The schema used may be out of date.");
         }
     };
 
