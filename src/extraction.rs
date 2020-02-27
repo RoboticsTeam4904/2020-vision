@@ -200,6 +200,13 @@ impl RFTapeContourExtractor {
         eroded_image
     }
 
+    fn grayscale_image(&self, image: &SomeMat) -> SomeMat {
+        let mut grayscale_image = default_mat().unwrap();
+        imgproc::cvt_color(&image, &mut grayscale_image, imgproc::COLOR_BGR2GRAY, 0).unwrap();
+
+        grayscale_image
+    }
+
     fn find_contours(&self, image: &SomeMat) -> Vec<VectorOfVectorOfPoint> {
         let mut contours = VectorOfVectorOfPoint::new();
         let mut hierarchy = VectorOfVec4i::new();
@@ -307,18 +314,19 @@ impl RFTapeContourExtractor {
         VectorOfPoint::from_iter(points)
     }
 
-    fn refine_vertices(&self, contour: &VectorOfPoint, image_mat: &SomeMat) -> VectorOfPoint2f {
+    fn refine_vertices(
+        &self,
+        contour: &VectorOfPoint,
+        grayscale_image_mat: &SomeMat,
+    ) -> VectorOfPoint2f {
         let mut corners = VectorOfPoint2f::from_iter(
             contour
                 .iter()
                 .map(|point| Point2f::new(point.x as f32, point.y as f32)),
         );
 
-        let mut grayscale_image = default_mat().unwrap();
-        imgproc::cvt_color(&image_mat, &mut grayscale_image, imgproc::COLOR_BGR2GRAY, 0).unwrap();
-
         imgproc::corner_sub_pix(
-            &grayscale_image,
+            &grayscale_image_mat,
             &mut corners,
             Size::new(5, 5),
             Size::new(-1, -1),
@@ -337,7 +345,7 @@ impl RFTapeContourExtractor {
     fn normalize_contours(
         &self,
         contours: &VectorOfVectorOfPoint,
-        image_mat: &SomeMat,
+        grayscale_image_mat: &SomeMat,
         target_num_vertices: usize,
     ) -> Option<Vec<Contour>> {
         let normalized_contours = contours
@@ -345,7 +353,7 @@ impl RFTapeContourExtractor {
             .filter_map(|contour| {
                 self.find_vertices(target_num_vertices, &contour)
                     .map(|verts| self.order_vertices(&verts))
-                    .map(|verts| self.refine_vertices(&verts, image_mat))
+                    .map(|verts| self.refine_vertices(&verts, grayscale_image_mat))
                     .map(|verts| self.convert_contour(&verts))
             })
             .collect::<Vec<_>>();
@@ -359,13 +367,15 @@ impl RFTapeContourExtractor {
     fn extract_matching_contours<'src, T: RFTapeTarget>(
         &'src self,
         contour_groups: &Vec<VectorOfVectorOfPoint>,
-        image_mat: &SomeMat,
+        grayscale_image_mat: &SomeMat,
         camera: &'src CameraConfig,
     ) -> Vec<ContourGroup<'src>> {
         contour_groups
             .iter()
             .filter(|group| T::filter(group))
-            .filter_map(|contours| self.normalize_contours(contours, image_mat, T::NUM_VERTICES))
+            .filter_map(|contours| {
+                self.normalize_contours(contours, grayscale_image_mat, T::NUM_VERTICES)
+            })
             .map(move |contours| ContourGroup {
                 id: T::TYPE,
                 camera,
@@ -395,15 +405,17 @@ impl ContourExtractor for RFTapeContourExtractor {
         let thresholded_image = self.threshold_image(&image_mat);
         let contour_groups = self.find_contours(&thresholded_image);
 
+        let grayscale_image_mat = self.grayscale_image(&image_mat);
+
         let high_port_contours = self.extract_matching_contours::<HighPortTarget>(
             &contour_groups,
-            &image_mat,
+            &grayscale_image_mat,
             image.camera,
         );
 
         let loading_port_contours = self.extract_matching_contours::<LoadingPortTarget>(
             &contour_groups,
-            &image_mat,
+            &grayscale_image_mat,
             image.camera,
         );
 
