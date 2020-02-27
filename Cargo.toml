@@ -11,3 +11,5 @@ stdvis-opencv = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ndarray = "0.13"
+nalgebra = "0.18.0"
+global-robot-localzation = {git = "https://github.com/RoboticsTeam4904/global-robot-localization"}
