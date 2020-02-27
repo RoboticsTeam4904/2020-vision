@@ -126,7 +126,7 @@ impl RFTapeTarget for LoadingPortTarget {
     }
 }
 
-pub(crate) struct RFTapeContourExtractor {
+pub struct RFTapeContourExtractor {
     morph_elem: Mat,
     sub_pix_term_criteria: TermCriteria,
 }
