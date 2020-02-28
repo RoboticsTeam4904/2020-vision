@@ -33,6 +33,13 @@ const LOADING_PORT_OBJECT_POINTS: &[(f32, f32)] = &[
     (0.0381, -0.0889),
 ];
 
+pub struct PnPResult {
+    pub intrinsic_matrix: Mat,
+    pub distortion_coeffs: Mat,
+    pub rvec_mat: Mat,
+    pub tvec_mat: Mat,
+}
+
 pub struct WallTapeContourAnalyzer {
     high_port_object_points: VectorOfPoint3f,
     loading_port_object_points: VectorOfPoint3f,
@@ -58,24 +65,34 @@ impl WallTapeContourAnalyzer {
         }
     }
 
-    pub fn find_target(
+    pub fn solve_pnp(
         &self,
-        id: u8,
         img_points: &VectorOfPoint2f,
         obj_points: &VectorOfPoint3f,
         config: &CameraConfig,
-    ) -> Target {
+    ) -> PnPResult {
         let mut rvec_mat = Mat::default().unwrap();
         let mut tvec_mat = Mat::default().unwrap();
 
-        let intrinsic_matrix = config.intrinsic_matrix.as_mat_view();
-        let dist_coeffs = config.distortion_coeffs.as_mat_view();
+        // TODO: Would like to use as_mat_view(), but it currently does not work for
+        // 2D matrices.
+        let i = config.intrinsic_matrix.view();
+        let d = config.distortion_coeffs.view();
+
+        let intrinsic_matrix = Mat::from_slice_2d(&[
+            &[i[[0, 0]], i[[0, 1]], i[[0, 2]]],
+            &[i[[1, 0]], i[[1, 1]], i[[1, 2]]],
+            &[i[[2, 0]], i[[2, 1]], i[[2, 2]]],
+        ])
+        .unwrap();
+
+        let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap()).unwrap();
 
         solve_pnp(
             &obj_points,
             &img_points,
-            &*intrinsic_matrix,
-            &*dist_coeffs,
+            &intrinsic_matrix,
+            &distortion_coeffs,
             &mut rvec_mat,
             &mut tvec_mat,
             false,
@@ -83,9 +100,21 @@ impl WallTapeContourAnalyzer {
         )
         .unwrap();
 
+        PnPResult {
+            intrinsic_matrix,
+            distortion_coeffs,
+            rvec_mat,
+            tvec_mat,
+        }
+    }
+
+    pub fn find_target(&self, id: u8, pnp_result: &PnPResult, config: &CameraConfig) -> Target {
+        let PnPResult {
+            rvec_mat, tvec_mat, ..
+        } = pnp_result;
+
         let mut rmat_mat = Mat::default().unwrap();
         let mut jacobian_mat = Mat::default().unwrap();
-
         rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat).unwrap();
 
         let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1)).unwrap();
@@ -114,7 +143,8 @@ impl WallTapeContourAnalyzer {
             id,
             theta: theta + config.pose.angle,
             beta: yaw + config.pose.angle,
-            dist: config.pose.angle.cos() * config.pose.dist + config.pose.yaw.cos() * z - config.pose.yaw.sin() * x,
+            dist: config.pose.angle.cos() * config.pose.dist + config.pose.yaw.cos() * z
+                - config.pose.yaw.sin() * x,
             height: y + config.pose.height,
             confidence: 0.,
         }
@@ -138,11 +168,8 @@ impl ContourAnalyzer for WallTapeContourAnalyzer {
                 .map(|point| Point2f::new(point.0 as f32, point.1 as f32)),
         );
 
-        self.find_target(
-            contour_group.id,
-            &img_points,
-            &obj_points,
-            contour_group.camera,
-        )
+        let pnp_result = self.solve_pnp(&img_points, &obj_points, contour_group.camera);
+
+        self.find_target(contour_group.id, &pnp_result, contour_group.camera)
     }
 }
