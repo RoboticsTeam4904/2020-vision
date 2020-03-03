@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use opencv::{
-    core::{Point, Point2f, Size, TermCriteria},
+    core::{Point, Point2f, Size, TermCriteria, TermCriteria_Type},
     imgproc,
     prelude::*,
     types::{VectorOfPoint, VectorOfPoint2f, VectorOfVec4i, VectorOfVectorOfPoint},
@@ -54,7 +54,7 @@ trait RFTapeTarget {
 
     fn calc_aspect_ratio(contour: &VectorOfPoint) -> f32 {
         let rect = imgproc::min_area_rect(&contour).unwrap();
-        let rect_size = rect.size().unwrap();
+        let rect_size = rect.size();
 
         rect_size.width / rect_size.height
     }
@@ -128,7 +128,6 @@ impl RFTapeTarget for LoadingPortTarget {
 
 pub struct RFTapeContourExtractor {
     morph_elem: Mat,
-    sub_pix_term_criteria: TermCriteria,
 }
 
 impl RFTapeContourExtractor {
@@ -143,16 +142,8 @@ impl RFTapeContourExtractor {
         )
         .unwrap();
 
-        let sub_pix_term_criteria = TermCriteria::new(
-            opencv::core::TermCriteria_EPS + opencv::core::TermCriteria_COUNT,
-            40,
-            0.01,
-        )
-        .unwrap();
-
         Self {
             morph_elem,
-            sub_pix_term_criteria,
         }
     }
 }
@@ -330,7 +321,12 @@ impl RFTapeContourExtractor {
             &mut corners,
             Size::new(5, 5),
             Size::new(-1, -1),
-            &self.sub_pix_term_criteria,
+            TermCriteria::new(
+                TermCriteria_Type::EPS as i32 + TermCriteria_Type::COUNT as i32,
+                40,
+                0.01,
+            )
+            .unwrap(),
         )
         .unwrap();
 

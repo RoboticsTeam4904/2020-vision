@@ -96,7 +96,7 @@ fn main() {
         imgcodecs::imwrite(
             format!("{}/{}_{}.png", out_path, params.label, index).as_str(),
             &*image_mat,
-            &opencv::types::VectorOfint::with_capacity(0),
+            &opencv::types::VectorOfi32::with_capacity(0),
         )
         .unwrap();
 

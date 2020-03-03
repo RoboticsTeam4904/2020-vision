@@ -2,7 +2,7 @@ use std::{env, fs, io::prelude::*};
 
 use opencv::{
     calib3d::{calibrate_camera, find_chessboard_corners_sb},
-    core::{Mat, Point3f, Size, TermCriteria},
+    core::{Mat, Point3f, Size, TermCriteria, TermCriteria_Type},
     imgcodecs::{imread, IMREAD_COLOR},
     prelude::*,
     types::{VectorOfPoint2f, VectorOfPoint3f, VectorOfVectorOfPoint2f, VectorOfVectorOfPoint3f},
@@ -119,8 +119,8 @@ fn main() {
         &mut rvecs,
         &mut tvecs,
         0,
-        &TermCriteria::new(
-            opencv::core::TermCriteria_COUNT + opencv::core::TermCriteria_EPS,
+        TermCriteria::new(
+            TermCriteria_Type::COUNT as i32 + TermCriteria_Type::EPS as i32,
             30,
             std::f64::EPSILON,
         )
