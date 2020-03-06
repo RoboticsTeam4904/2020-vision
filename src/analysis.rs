@@ -1,8 +1,10 @@
+use anyhow::Result;
+
 use opencv::{
     calib3d::{rodrigues, solve_pnp_generic, SolvePnPMethod},
     core::{Mat, Point2f, Point3f},
     prelude::*,
-    types::{VectorOfPoint2f, VectorOfPoint3f, VectorOfMat},
+    types::{VectorOfMat, VectorOfPoint2f, VectorOfPoint3f},
 };
 
 use stdvis_core::{
@@ -10,7 +12,7 @@ use stdvis_core::{
     types::{CameraConfig, ContourGroup, Target},
 };
 
-use stdvis_opencv::convert::{AsArrayView, AsMatView};
+use stdvis_opencv::convert::AsArrayView;
 
 const HIGH_PORT_OBJECT_POINTS: &[(f32, f32)] = &[
     (0.5, 0.2165),
@@ -98,11 +100,12 @@ impl WallTapeContourAnalyzer {
         }
     }
 
-    pub fn solve_pnp(
-        &self,
-        params: PnPParams,
-    ) -> Vec<PnPResult> {
-        let PnPParams { img_points, obj_points, config } = params;
+    pub fn solve_pnp(&self, params: PnPParams) -> Result<Vec<PnPResult>> {
+        let PnPParams {
+            img_points,
+            obj_points,
+            config,
+        } = params;
 
         let mut rvec_mats = VectorOfMat::new();
         let mut tvec_mats = VectorOfMat::new();
@@ -116,10 +119,9 @@ impl WallTapeContourAnalyzer {
             &[i[[0, 0]], i[[0, 1]], i[[0, 2]]],
             &[i[[1, 0]], i[[1, 1]], i[[1, 2]]],
             &[i[[2, 0]], i[[2, 1]], i[[2, 2]]],
-        ])
-        .unwrap();
+        ])?;
 
-        let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap()).unwrap();
+        let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap())?;
 
         solve_pnp_generic(
             &obj_points,
@@ -133,41 +135,53 @@ impl WallTapeContourAnalyzer {
             &opencv::core::no_array().unwrap(),
             &opencv::core::no_array().unwrap(),
             &mut opencv::core::no_array().unwrap(),
-        )
-        .unwrap();
+        )?;
 
-        rvec_mats.iter().zip(tvec_mats).map(|(rvec_mat, tvec_mat)| {
-            PnPResult {
+        let results = rvec_mats
+            .iter()
+            .zip(tvec_mats)
+            .map(|(rvec_mat, tvec_mat)| PnPResult {
                 intrinsic_matrix: Mat::copy(&intrinsic_matrix).unwrap(),
                 distortion_coeffs: Mat::copy(&distortion_coeffs).unwrap(),
                 rvec_mat,
                 tvec_mat,
-            }
-        }).collect()
+            })
+            .collect();
+
+        Ok(results)
     }
 
-    pub fn find_target(&self, id: u8, pnp_results: &Vec<PnPResult>, config: &CameraConfig) -> Target {
-        let (rmat, tvec, camera_pose) = pnp_results.iter().find_map(move |pnp_result| {
+    pub fn find_target(
+        &self,
+        id: u8,
+        pnp_results: &Vec<PnPResult>,
+        config: &CameraConfig,
+    ) -> Result<Target> {
+        let mut result_iter = pnp_results.iter();
+
+        let (rmat, tvec, camera_pose) = loop {
+            let pnp_result = result_iter.next().expect("Failed to find valid PnP result");
+
             let PnPResult {
                 rvec_mat, tvec_mat, ..
             } = pnp_result;
 
             let mut rmat_mat = Mat::default().unwrap();
             let mut jacobian_mat = Mat::default().unwrap();
-            rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat).unwrap();
+            rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat)?;
 
-            let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1)).unwrap();
-            let rmat = rmat_mat.as_array_view::<f64>().into_shape((3, 3)).unwrap();
+            let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
+            let rmat = rmat_mat.as_array_view::<f64>().into_shape((3, 3))?;
             let rmat_t = rmat.t();
 
             let camera_pose = rmat_t.dot(&tvec);
 
             if tvec[[2, 0]].is_sign_negative() {
-                return None;
+                continue;
             }
 
-            Some((rmat.into_owned(), tvec.into_owned(), camera_pose))
-        }).expect("Failed to find valid PnP solution");
+            break (rmat.into_owned(), tvec.into_owned(), camera_pose);
+        };
 
         let x = camera_pose[[0, 0]];
         let y = camera_pose[[1, 0]];
@@ -185,7 +199,7 @@ impl WallTapeContourAnalyzer {
         let pitch = -r20.atan2((r21.powf(2.) + r22.powf(2.)).sqrt());
         let yaw = r21.atan2(r22);
 
-        Target {
+        Ok(Target {
             id,
             theta: theta + config.pose.angle,
             beta: yaw + config.pose.angle,
@@ -193,15 +207,17 @@ impl WallTapeContourAnalyzer {
                 - config.pose.yaw.sin() * x,
             height: y + config.pose.height,
             confidence: 0.,
-        }
+        })
     }
 }
 
 impl ContourAnalyzer for WallTapeContourAnalyzer {
-    fn analyze(&self, contour_group: &ContourGroup) -> Target {
+    fn analyze(&self, contour_group: &ContourGroup) -> Result<Target> {
         let pnp_params = self.make_pnp_params(contour_group);
-        let pnp_result = self.solve_pnp(pnp_params);
+        let pnp_result = self.solve_pnp(pnp_params)?;
 
-        self.find_target(contour_group.id, &pnp_result, contour_group.camera)
+        let target = self.find_target(contour_group.id, &pnp_result, contour_group.camera)?;
+
+        Ok(target)
     }
 }
