@@ -181,9 +181,7 @@ impl RFTapeContourExtractor {
 
         Self { morph_elem }
     }
-}
 
-impl RFTapeContourExtractor {
     pub fn threshold_image(&self, image: &SomeMat) -> Result<SomeMat> {
         const RFTAPE_HSV_RANGE: Range<[u8; 3]> = [50, 50, 50]..[94, 255, 255];
 
