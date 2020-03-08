@@ -29,7 +29,3 @@ opencv = { version = "0.30", default-features = false, features = ["opencv-4", "
 
 [target.'cfg(not(linux))'.dependencies]
 opencv = { version = "0.30", default-features = false, features = ["opencv-4", "contrib", "buildtime-bindgen"] }
-
-[patch."https://github.com/RoboticsTeam4904/standard-vision"]
-stdvis-core = { path = "../standard-vision/stdvis-core" }
-stdvis-opencv = { path = "../standard-vision/stdvis-opencv" }
