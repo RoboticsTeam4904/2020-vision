@@ -39,6 +39,8 @@ trait RFTapeTarget {
     const TYPE: u8;
     const NUM_VERTICES: usize;
 
+    /// Calculate the ratio between the area of `contour` and `hull`.
+    /// If `hull` is not specified, the convex hull of `contour` will be used.
     fn calc_solidity(contour: &VectorOfPoint, hull: Option<&VectorOfPoint>) -> Result<f64> {
         let contour_area = imgproc::contour_area(&contour, false)?;
 
@@ -54,6 +56,7 @@ trait RFTapeTarget {
         Ok(contour_area / hull_area)
     }
 
+    /// Calculate the aspect ratio (width:height) of `contour` by creating a rotated rectangular bounding box around it.
     fn calc_aspect_ratio(contour: &VectorOfPoint) -> Result<f32> {
         let rect = imgproc::min_area_rect(&contour)?;
         let rect_size = rect.size();
@@ -61,6 +64,7 @@ trait RFTapeTarget {
         Ok(rect_size.width / rect_size.height)
     }
 
+    /// Filter a set of `contours`, returning `true` if they are of this type or `false` otherwise.
     fn filter(contours: &VectorOfVectorOfPoint) -> Result<bool>;
 }
 
@@ -88,15 +92,6 @@ impl RFTapeTarget for HighPortTarget {
             return Ok(false);
         }
 
-        println!(
-            "hp solidity :: {}",
-            Self::calc_solidity(&external_contour, None).unwrap()
-        );
-        println!(
-            "hp aspect ratio :: {}",
-            Self::calc_aspect_ratio(&external_contour).unwrap()
-        );
-
         if !Self::SOLIDITY_RANGE.contains(&Self::calc_solidity(&external_contour, None)?) {
             return Ok(false);
         }
@@ -104,8 +99,6 @@ impl RFTapeTarget for HighPortTarget {
         if !Self::ASPECT_RATIO_RANGE.contains(&Self::calc_aspect_ratio(&external_contour)?) {
             return Ok(false);
         }
-
-        println!("valid contour area :: {}", external_area);
 
         Ok(true)
     }
@@ -137,15 +130,6 @@ impl RFTapeTarget for LoadingPortTarget {
             return Ok(false);
         }
 
-        println!(
-            "lp solidity :: {}",
-            Self::calc_solidity(&internal_contour, Some(&external_contour)).unwrap()
-        );
-        println!(
-            "lp aspect ratio :: {}",
-            Self::calc_aspect_ratio(&external_contour).unwrap()
-        );
-
         if !Self::SOLIDITY_RANGE.contains(&Self::calc_solidity(
             &internal_contour,
             Some(&external_contour),
@@ -157,13 +141,12 @@ impl RFTapeTarget for LoadingPortTarget {
             return Ok(false);
         }
 
-        println!("valid contour area :: {}", external_area);
-
         Ok(true)
     }
 }
 
 pub struct RFTapeContourExtractor {
+    /// A morphological element for dilating and eroding an image.
     morph_elem: Mat,
 }
 
@@ -182,6 +165,7 @@ impl RFTapeContourExtractor {
         Self { morph_elem }
     }
 
+    /// Threshold (binarize) `image` such that only regions with the expected green tape color are white.
     pub fn threshold_image(&self, image: &SomeMat) -> Result<SomeMat> {
         const RFTAPE_HSV_RANGE: Range<[u8; 3]> = [50, 50, 50]..[94, 255, 255];
 
@@ -196,9 +180,16 @@ impl RFTapeContourExtractor {
             &mut thresholded_image,
         )?;
 
+        Ok(thresholded_image)
+    }
+
+    /// Denoise the image by dilating it and eroding it.
+    /// This has the effect of removing noisy regions of the image,
+    /// hopefully without compromising the integrity of the contours.
+    pub fn denoise_image(&self, image: &SomeMat) -> Result<SomeMat> {
         let mut dilated_image = default_mat()?;
         imgproc::dilate(
-            &thresholded_image,
+            &image,
             &mut dilated_image,
             &self.morph_elem,
             Point::new(-1, -1),
@@ -240,9 +231,15 @@ impl RFTapeContourExtractor {
             opencv::core::Point::new(0, 0),
         )?;
 
+        // The contours returned from OpenCV are in a hierarchical structure.
+        // In order to simplify this, the hierarchy is flattened such that each
+        // contour is grouped with their highest-order ancestor.
+
         let mut groups: Vec<Vec<i32>> = Vec::new();
 
         for (contour_index, indices) in hierarchy.iter().enumerate() {
+            // The hierarchy indices are (next, previous, child, parent).
+            // This picks out the 3rd index: the parent index.
             let parent_index = indices.get(3).unwrap();
             let group_indices = match groups
                 .iter_mut()
@@ -270,6 +267,9 @@ impl RFTapeContourExtractor {
             .collect())
     }
 
+    /// Coerce `contour` into being a polygon with `target_num_vertices` points.
+    ///
+    /// Returns `Ok(None)` if this coercion fails.
     fn find_vertices(
         &self,
         target_num_vertices: usize,
@@ -291,6 +291,8 @@ impl RFTapeContourExtractor {
         }
     }
 
+    /// Sort the vertices of `contour` so that the first vertex has the smallest
+    /// theta on a unit circle and guarantee counter-clockwise winding.
     fn order_vertices(&self, contour: &VectorOfPoint) -> Result<VectorOfPoint> {
         let num_points = contour.len();
         let mut centroid = contour
@@ -302,6 +304,8 @@ impl RFTapeContourExtractor {
             centroid.1 / num_points as i32,
         );
 
+        // Calculate the angle of `point` relative to `centroid` as if it was on
+        // a unit circle.
         let vertex_theta = |point: &Point| -> f32 {
             let theta = (-(point.y - centroid.1) as f32).atan2((point.x - centroid.0) as f32);
 
@@ -312,6 +316,10 @@ impl RFTapeContourExtractor {
             }
         };
 
+        // Pick out the index of the point which should come first in the
+        // contour.
+        // This first point should be the one with the smallest angle, which is
+        // calculated by `vertex_theta`.
         let (first_idx, _) = contour
             .iter()
             .enumerate()
@@ -319,21 +327,32 @@ impl RFTapeContourExtractor {
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .unwrap();
 
+        // Contour winding can be determined by checking the sign of the contour's signed area.
+        // See Green's Theorem for more information.
         let signed_area = imgproc::contour_area(contour, true)?;
         let is_clockwise = signed_area.is_sign_positive();
 
         let mut points = contour.to_vec();
 
         if is_clockwise {
+            // Rotate the intended first point to the end and then reverse so
+            // that the winding is counter-clockwise.
             points.rotate_right(num_points - first_idx - 1);
             points.reverse();
         } else {
+            // Rotate the intended first point to the beginning.
+            // The winding should already be counter-clockwise.
             points.rotate_left(first_idx);
         }
 
         Ok(VectorOfPoint::from_iter(points))
     }
 
+    /// Refine the vertices of `contour` using a `grayscale_image_mat`.
+    /// This is useful because thresholding the image erases any shading from
+    /// the original image; by using the original image (in grayscale), the
+    /// vertices can be refined to sub-pixel values based on the image's
+    /// shading.
     fn refine_vertices(
         &self,
         contour: &VectorOfPoint,
@@ -350,6 +369,8 @@ impl RFTapeContourExtractor {
             &mut corners,
             Size::new(5, 5),
             Size::new(-1, -1),
+            // This `TermCriteria` is the default value for the equivalent C++ function.
+            // It is possible that these values could be optimized in the future.
             TermCriteria::new(
                 TermCriteria_Type::EPS as i32 + TermCriteria_Type::COUNT as i32,
                 40,
@@ -365,6 +386,10 @@ impl RFTapeContourExtractor {
         Contour { points }
     }
 
+    /// Normalize a group of `contours` by coercing each contour into a polygon
+    /// of `target_num_vertices` and then ordering and refining its vertices.
+    ///
+    /// Returns `Ok(None)` if coercion fails for any contour in `contours`.
     fn normalize_contours(
         &self,
         contours: &VectorOfVectorOfPoint,
@@ -434,7 +459,8 @@ impl ContourExtractor for RFTapeContourExtractor {
         let image_mat = image.as_mat_view();
 
         let thresholded_image = self.threshold_image(&image_mat)?;
-        let contour_groups = self.find_contours(&thresholded_image)?;
+        let denoised_image = self.denoise_image(&thresholded_image)?;
+        let contour_groups = self.find_contours(&denoised_image)?;
 
         let grayscale_image_mat = self.grayscale_image(&image_mat)?;
 
