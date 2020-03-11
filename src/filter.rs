@@ -1,12 +1,14 @@
-use std::time::Instant;
+use std::{collections::HashMap, time::Instant};
 
 use global_robot_localization::{ai::kalman_filter::KalmanFilterVision, utility::Pose};
 use nalgebra::{Matrix3, RowVector3, Vector3};
+use rand::{distributions::Distribution, rngs::ThreadRng, thread_rng};
+use rand_distr::Normal;
 use stdvis_core::types::VisionTarget;
 
 pub struct TargetFilter {
     kalman_filter: KalmanFilterVision,
-    pub last_timestamp: Instant,
+    pub last_update_time: Instant,
 }
 
 impl TargetFilter {
@@ -18,7 +20,7 @@ impl TargetFilter {
     pub const CONTROL_NOISE_X: f64 = 0.05;
     pub const CONTROL_NOISE_Y: f64 = 0.05;
 
-    pub fn new(last_timestamp: Instant, initial_target: &VisionTarget) -> Self {
+    pub fn new(last_update_time: Instant, initial_target: &VisionTarget) -> Self {
         let q = Matrix3::from_diagonal(&Vector3::new(
             Self::CONTROL_NOISE_BETA.powi(2),
             Self::CONTROL_NOISE_X.powi(2),
@@ -48,12 +50,14 @@ impl TargetFilter {
 
         Self {
             kalman_filter,
-            last_timestamp,
+            last_update_time,
         }
     }
 
     pub fn update(&mut self, timestamp: Instant, control_pose: Pose, target: &VisionTarget) {
-        let delta_t = timestamp.duration_since(self.last_timestamp).as_secs_f64();
+        let delta_t = timestamp
+            .duration_since(self.last_update_time)
+            .as_secs_f64();
 
         let target_pose = Pose {
             angle: target.beta,
@@ -67,7 +71,7 @@ impl TargetFilter {
         self.kalman_filter.prediction_update(delta_t, control_pose);
         self.kalman_filter.measurement_update(target_pose);
 
-        self.last_timestamp = timestamp;
+        self.last_update_time = timestamp;
     }
 
     pub fn predict(&self, target: VisionTarget) -> VisionTarget {
@@ -77,6 +81,70 @@ impl TargetFilter {
             theta: predicted_pose.angle,
             dist: predicted_pose.position.x.hypot(predicted_pose.position.y),
             ..target
+        }
+    }
+}
+
+pub struct TargetFilterMap {
+    target_filters: HashMap<u8, TargetFilter>,
+    rng: ThreadRng,
+}
+
+impl TargetFilterMap {
+    const TARGET_FILTER_EXPIRATION_THRESHOLD: f64 = 0.5;
+
+    pub fn new() -> Self {
+        TargetFilterMap {
+            target_filters: HashMap::new(),
+            rng: thread_rng(),
+        }
+    }
+
+    pub fn filter_target(
+        &mut self,
+        target: VisionTarget,
+        timestamp: Instant,
+    ) -> Option<VisionTarget> {
+        // TODO: This should be part of a sensor.
+        // There can be two sensors, one real and one that returns random noise data.
+        let control_noise_beta = Normal::new(0., TargetFilter::CONTROL_NOISE_BETA).unwrap();
+        let control_noise_x = Normal::new(0., TargetFilter::CONTROL_NOISE_X).unwrap();
+        let control_noise_y = Normal::new(0., TargetFilter::CONTROL_NOISE_Y).unwrap();
+
+        match self.target_filters.get_mut(&target.id) {
+            None => {
+                self.target_filters
+                    .insert(target.id, TargetFilter::new(timestamp.clone(), &target));
+
+                None
+            }
+            Some(filter) => {
+                let delta_t = timestamp
+                    .duration_since(filter.last_update_time)
+                    .as_secs_f64();
+
+                if delta_t > Self::TARGET_FILTER_EXPIRATION_THRESHOLD {
+                    self.target_filters
+                        .insert(target.id, TargetFilter::new(timestamp.clone(), &target));
+
+                    None
+                } else {
+                    let control_pose = Pose {
+                        angle: control_noise_beta.sample(&mut self.rng),
+                        position: (
+                            control_noise_x.sample(&mut self.rng),
+                            control_noise_y.sample(&mut self.rng),
+                        )
+                            .into(),
+                    };
+
+                    filter.update(timestamp.clone(), control_pose, &target);
+
+                    let predicted_target = filter.predict(target.clone());
+
+                    Some(predicted_target)
+                }
+            }
         }
     }
 }
