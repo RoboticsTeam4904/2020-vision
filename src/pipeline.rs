@@ -1,38 +1,35 @@
 use anyhow::{Context, Result};
 use stdvis_core::{
-    traits::{Camera, ContourAnalyzer, ContourExtractor},
-    types::{CameraConfig, VisionTarget},
+    traits::{Camera as CameraTrait, ContourAnalyzer, ContourExtractor, ImageData},
+    types::VisionTarget,
 };
-use stdvis_opencv::{camera::OpenCVCamera, convert::AsMatView};
+use stdvis_opencv::convert::AsMatView;
 
-use crate::{
-    analysis::WallTapeContourAnalyzer,
-    extraction::RFTapeContourExtractor,
-    filter::TargetFilterMap,
-};
+use crate::filter::TargetFilterMap;
 
-pub struct VisionPipeline {
-    camera: OpenCVCamera,
-    extractor: RFTapeContourExtractor,
-    analyzer: WallTapeContourAnalyzer,
+pub struct VisionPipeline<Camera: CameraTrait, Extractor, Analyzer> {
+    camera: Camera,
+    extractor: Extractor,
+    analyzer: Analyzer,
     target_filters: TargetFilterMap,
 }
 
-impl VisionPipeline {
-    pub fn new(config: CameraConfig) -> Result<Self> {
-        let camera = OpenCVCamera::new(config)?;
-
-        let extractor = RFTapeContourExtractor::new();
-        let analyzer = WallTapeContourAnalyzer::new();
-
+impl<I, Camera, Extractor, Analyzer> VisionPipeline<Camera, Extractor, Analyzer>
+where
+    I: ImageData,
+    Camera: CameraTrait<ImageStorage = I>,
+    Extractor: ContourExtractor,
+    Analyzer: ContourAnalyzer,
+{
+    pub fn new(camera: Camera, extractor: Extractor, analyzer: Analyzer) -> Self {
         let target_filters = TargetFilterMap::new();
 
-        Ok(VisionPipeline {
+        VisionPipeline {
             camera,
             extractor,
             analyzer,
             target_filters,
-        })
+        }
     }
 
     pub fn run(&mut self) -> Result<Vec<VisionTarget>> {
@@ -56,10 +53,10 @@ impl VisionPipeline {
                 .analyze(&group)
                 .context("Contour analysis failed")?;
 
-            let filtered_target = self.target_filters.filter_target(target, frame.timestamp);
-
-            if let Some(result_target) = filtered_target {
-                result_targets.push(result_target);
+            if let Some(filtered_target) =
+                self.target_filters.filter_target(target, frame.timestamp)
+            {
+                result_targets.push(filtered_target);
             }
         }
 
