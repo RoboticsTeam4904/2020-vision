@@ -9,7 +9,7 @@ use opencv::{
 
 use stdvis_core::{
     traits::ContourAnalyzer,
-    types::{CameraConfig, ContourGroup, Target},
+    types::{CameraConfig, ContourGroup, VisionTarget},
 };
 
 use stdvis_opencv::convert::AsArrayView;
@@ -132,9 +132,9 @@ impl WallTapeContourAnalyzer {
             &mut tvec_mats,
             false,
             SolvePnPMethod::SOLVEPNP_IPPE,
-            &opencv::core::no_array().unwrap(),
-            &opencv::core::no_array().unwrap(),
-            &mut opencv::core::no_array().unwrap(),
+            &opencv::core::no_array(),
+            &opencv::core::no_array(),
+            &mut opencv::core::no_array(),
         )?;
 
         let results = rvec_mats
@@ -156,7 +156,7 @@ impl WallTapeContourAnalyzer {
         id: u8,
         pnp_results: &Vec<PnPResult>,
         config: &CameraConfig,
-    ) -> Result<Target> {
+    ) -> Result<VisionTarget> {
         let mut result_iter = pnp_results.iter();
 
         let (rmat, tvec, camera_pose) = loop {
@@ -166,8 +166,8 @@ impl WallTapeContourAnalyzer {
                 rvec_mat, tvec_mat, ..
             } = pnp_result;
 
-            let mut rmat_mat = Mat::default().unwrap();
-            let mut jacobian_mat = Mat::default().unwrap();
+            let mut rmat_mat = Mat::default();
+            let mut jacobian_mat = Mat::default();
             rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat)?;
 
             let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
@@ -199,7 +199,7 @@ impl WallTapeContourAnalyzer {
         let pitch = -r20.atan2((r21.powf(2.) + r22.powf(2.)).sqrt());
         let yaw = r21.atan2(r22);
 
-        Ok(Target {
+        Ok(VisionTarget {
             id,
             theta: theta + config.pose.angle,
             beta: yaw + config.pose.angle,
@@ -212,7 +212,7 @@ impl WallTapeContourAnalyzer {
 }
 
 impl ContourAnalyzer for WallTapeContourAnalyzer {
-    fn analyze(&self, contour_group: &ContourGroup) -> Result<Target> {
+    fn analyze(&self, contour_group: &ContourGroup) -> Result<VisionTarget> {
         let pnp_params = self.make_pnp_params(contour_group);
         let pnp_result = self.solve_pnp(pnp_params)?;
 

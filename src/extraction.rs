@@ -20,18 +20,18 @@ use stdvis_core::{
 use stdvis_opencv::convert::AsMatView;
 
 #[cfg(feature = "opencl")]
-type SomeMat = UMat;
+type MatImpl = UMat;
 
 #[cfg(not(any(feature = "opencl")))]
-type SomeMat = Mat;
+type MatImpl = Mat;
 
 #[cfg(feature = "opencl")]
-fn default_mat() -> opencv::Result<UMat> {
+fn default_mat() -> MatImpl {
     UMat::new(opencv::core::UMatUsageFlags::USAGE_DEFAULT)
 }
 
 #[cfg(not(any(feature = "opencl")))]
-fn default_mat() -> opencv::Result<Mat> {
+fn default_mat() -> MatImpl {
     Mat::default()
 }
 
@@ -166,13 +166,13 @@ impl RFTapeContourExtractor {
     }
 
     /// Threshold (binarize) `image` such that only regions with the expected green tape color are white.
-    pub fn threshold_image(&self, image: &SomeMat) -> Result<SomeMat> {
+    pub fn threshold_image(&self, image: &MatImpl) -> Result<MatImpl> {
         const RFTAPE_HSV_RANGE: Range<[u8; 3]> = [50, 50, 50]..[94, 255, 255];
 
-        let mut hsv_image = default_mat()?;
+        let mut hsv_image = default_mat();
         imgproc::cvt_color(&image, &mut hsv_image, imgproc::COLOR_BGR2HSV, 0)?;
 
-        let mut thresholded_image = default_mat()?;
+        let mut thresholded_image = default_mat();
         opencv::core::in_range(
             &hsv_image,
             &Mat::from_slice(&RFTAPE_HSV_RANGE.start).unwrap(),
@@ -186,8 +186,8 @@ impl RFTapeContourExtractor {
     /// Denoise the image by dilating it and eroding it.
     /// This has the effect of removing noisy regions of the image,
     /// hopefully without compromising the integrity of the contours.
-    pub fn denoise_image(&self, image: &SomeMat) -> Result<SomeMat> {
-        let mut dilated_image = default_mat()?;
+    pub fn denoise_image(&self, image: &MatImpl) -> Result<MatImpl> {
+        let mut dilated_image = default_mat();
         imgproc::dilate(
             &image,
             &mut dilated_image,
@@ -198,7 +198,7 @@ impl RFTapeContourExtractor {
             imgproc::morphology_default_border_value().unwrap(),
         )?;
 
-        let mut eroded_image = default_mat()?;
+        let mut eroded_image = default_mat();
         imgproc::erode(
             &dilated_image,
             &mut eroded_image,
@@ -212,14 +212,14 @@ impl RFTapeContourExtractor {
         Ok(eroded_image)
     }
 
-    fn grayscale_image(&self, image: &SomeMat) -> Result<SomeMat> {
-        let mut grayscale_image = default_mat()?;
+    fn grayscale_image(&self, image: &MatImpl) -> Result<MatImpl> {
+        let mut grayscale_image = default_mat();
         imgproc::cvt_color(&image, &mut grayscale_image, imgproc::COLOR_BGR2GRAY, 0)?;
 
         Ok(grayscale_image)
     }
 
-    fn find_contours(&self, image: &SomeMat) -> Result<Vec<VectorOfVectorOfPoint>> {
+    fn find_contours(&self, image: &MatImpl) -> Result<Vec<VectorOfVectorOfPoint>> {
         let mut contours = VectorOfVectorOfPoint::new();
         let mut hierarchy = VectorOfVec4i::new();
         imgproc::find_contours_with_hierarchy(
@@ -356,7 +356,7 @@ impl RFTapeContourExtractor {
     fn refine_vertices(
         &self,
         contour: &VectorOfPoint,
-        grayscale_image_mat: &SomeMat,
+        grayscale_image_mat: &MatImpl,
     ) -> Result<VectorOfPoint2f> {
         let mut corners = VectorOfPoint2f::from_iter(
             contour
@@ -393,7 +393,7 @@ impl RFTapeContourExtractor {
     fn normalize_contours(
         &self,
         contours: &VectorOfVectorOfPoint,
-        grayscale_image_mat: &SomeMat,
+        grayscale_image_mat: &MatImpl,
         target_num_vertices: usize,
     ) -> Result<Option<Vec<Contour>>> {
         let mut normalized_contours = Vec::with_capacity(contours.len());
@@ -416,7 +416,7 @@ impl RFTapeContourExtractor {
     fn extract_matching_contours<'src, Target: RFTapeTarget>(
         &'src self,
         contour_groups: &Vec<VectorOfVectorOfPoint>,
-        grayscale_image_mat: &SomeMat,
+        grayscale_image_mat: &MatImpl,
         camera: &'src CameraConfig,
     ) -> Result<Vec<ContourGroup<'src>>> {
         let mut result_groups = Vec::new();
@@ -487,4 +487,3 @@ impl ContourExtractor for RFTapeContourExtractor {
         Ok(grouped_contours)
     }
 }
-

@@ -13,19 +13,14 @@ path = "src/main.rs"
 opencl = []
 
 [dependencies]
-anyhow = "1.0"
+anyhow = "1.0.52"
 global-robot-localization = { git = "https://github.com/RoboticsTeam4904/global-robot-localization" }
-nalgebra = "0.18"
-ndarray = "0.13"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-rand = "0.7"
-rand_distr = "0.2"
+nalgebra = "0.30.1"
+ndarray = "0.15.4"
+serde = { version = "1.0.133", features = ["derive"] }
+serde_json = "1.0.74"
+rand = "0.8.4"
+rand_distr = "0.4.2"
 stdvis-core = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
 stdvis-opencv = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
-
-[target.'cfg(linux)'.dependencies]
-opencv = { version = "0.30", default-features = false, features = ["opencv-4", "contrib"] }
-
-[target.'cfg(not(linux))'.dependencies]
-opencv = { version = "0.30", default-features = false, features = ["opencv-4", "contrib", "buildtime-bindgen"] }
+opencv = "0.62"

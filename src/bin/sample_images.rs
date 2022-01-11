@@ -1,6 +1,6 @@
 use stdvis_core::{
     traits::Camera,
-    types::{CameraConfig, Target},
+    types::{CameraConfig, VisionTarget},
 };
 use stdvis_opencv::{camera::OpenCVCamera, convert::AsMatView};
 
@@ -10,7 +10,7 @@ use serde_json;
 #[derive(Default, Serialize, Deserialize)]
 struct Params {
     label: String,
-    target: Target,
+    target: VisionTarget,
     camera: CameraConfig,
 }
 
