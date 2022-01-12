@@ -14,13 +14,14 @@ opencl = []
 
 [dependencies]
 anyhow = "1.0.52"
+clap = { version = "3.0.6", features = ["derive"] }
 global-robot-localization = { git = "https://github.com/RoboticsTeam4904/global-robot-localization" }
 nalgebra = "0.30.1"
 ndarray = "0.15.4"
-serde = { version = "1.0.133", features = ["derive"] }
-serde_json = "1.0.74"
+opencv = "0.62"
 rand = "0.8.4"
 rand_distr = "0.4.2"
+serde = { version = "1.0.133", features = ["derive"] }
+serde_json = "1.0.74"
 stdvis-core = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
 stdvis-opencv = { git = "https://github.com/RoboticsTeam4904/standard-vision" }
-opencv = "0.62"
