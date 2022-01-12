@@ -5,13 +5,13 @@ use stdvis_core::{
 };
 use stdvis_opencv::convert::AsMatView;
 
-use crate::filter::TargetFilterMap;
+// use crate::filter::TargetFilterMap;
 
 pub struct VisionPipeline<Camera: CameraTrait, Extractor, Analyzer> {
     camera: Camera,
     extractor: Extractor,
     analyzer: Analyzer,
-    target_filters: TargetFilterMap,
+    // target_filters: TargetFilterMap,
 }
 
 impl<I, Camera, Extractor, Analyzer> VisionPipeline<Camera, Extractor, Analyzer>
@@ -22,13 +22,13 @@ where
     Analyzer: ContourAnalyzer,
 {
     pub fn new(camera: Camera, extractor: Extractor, analyzer: Analyzer) -> Self {
-        let target_filters = TargetFilterMap::new();
+        // let target_filters = TargetFilterMap::new();
 
         VisionPipeline {
             camera,
             extractor,
             analyzer,
-            target_filters,
+            // target_filters,
         }
     }
 
@@ -53,11 +53,16 @@ where
                 .analyze(&group)
                 .context("Contour analysis failed")?;
 
-            if let Some(filtered_target) =
-                self.target_filters.filter_target(target, frame.timestamp)
-            {
-                result_targets.push(filtered_target);
-            }
+            // TODO: Evaluate later, but it is unclear if using Kalman filtering
+            // at this stage is beneficial.
+
+            // if let Some(filtered_target) =
+            //     self.target_filters.filter_target(target, frame.timestamp)
+            // {
+            //     result_targets.push(filtered_target);
+            // }
+
+            result_targets.push(target);
         }
 
         Ok(result_targets)
