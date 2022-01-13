@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use opencv::{
     calib3d,
     core::{Mat, Point3f, Size, TermCriteria, TermCriteria_Type},
-    imgcodecs::{self, IMREAD_COLOR},
+    imgcodecs::{self, IMREAD_GRAYSCALE},
     prelude::*,
     types::{VectorOfPoint2f, VectorOfPoint3f, VectorOfVectorOfPoint2f, VectorOfVectorOfPoint3f},
 };
@@ -89,23 +89,38 @@ fn main() -> Result<()> {
     let image_size = Size::new(resolution.0 as i32, resolution.1 as i32);
 
     for path in image_paths {
-        let image = imgcodecs::imread(&path, IMREAD_COLOR).context("reading image from disk")?;
+        let image =
+            imgcodecs::imread(&path, IMREAD_GRAYSCALE).context("reading image from disk")?;
 
         if image.size().unwrap() != image_size {
             bail!("Expected all images to be the same size");
         }
 
         let mut corners = VectorOfPoint2f::new();
-        calib3d::find_chessboard_corners_sb(
+        let found = calib3d::find_chessboard_corners(
             &image,
             Size::new(config.board_rows as i32, config.board_cols as i32),
             &mut corners,
             0,
         )
-        .context("failed to find checkerboard corners")?;
+        .context("finding checkerboard corners")?;
+
+        if !found {
+            println!("failed to find checkerboard corners for image: {}", path);
+            continue;
+        }
 
         obj_points.push(VectorOfPoint3f::from_iter(template_obj_points.clone()));
         img_points.push(corners);
+    }
+
+    println!(
+        "successfully performed corner-finding on {} images",
+        img_points.len()
+    );
+
+    if img_points.len() < 3 {
+        bail!("insufficient successful corner-finding results to continue to calibration.");
     }
 
     let mut camera_matrix = Mat::default();
@@ -113,7 +128,7 @@ fn main() -> Result<()> {
     let mut rvecs = Mat::default();
     let mut tvecs = Mat::default();
 
-    calib3d::calibrate_camera(
+    let reproj_error = calib3d::calibrate_camera(
         &VectorOfVectorOfPoint3f::from_iter(obj_points),
         &VectorOfVectorOfPoint2f::from_iter(img_points),
         image_size,
@@ -131,6 +146,11 @@ fn main() -> Result<()> {
         .unwrap(),
     )
     .context("calibrating camera")?;
+
+    println!(
+        "calibration finished with reprojection error: {}",
+        reproj_error
+    );
 
     config.camera.intrinsic_matrix = camera_matrix
         .as_array_view::<f64>()
