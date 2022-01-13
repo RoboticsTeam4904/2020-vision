@@ -93,11 +93,13 @@ fn main() -> Result<()> {
     // Allow the camera to "warm up."
     thread::sleep(Duration::from_millis(1000));
 
+    let output_dir = args.output_dir;
+
     let mut metadata_file = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
-        .open(METADATA_FILENAME)
+        .open(output_dir.join(METADATA_FILENAME))
         .unwrap();
 
     let mut metadata_str = String::new();
@@ -107,7 +109,6 @@ fn main() -> Result<()> {
         serde_json::from_str(&metadata_str).unwrap_or(Metadata { images: Vec::new() });
 
     let delay = args.delay_ms.map(|ms| Duration::from_millis(ms));
-    let output_dir = args.output_dir;
 
     for idx in 0..10 {
         camera.set_exposure(-(idx as f64) * 0.1).unwrap();
