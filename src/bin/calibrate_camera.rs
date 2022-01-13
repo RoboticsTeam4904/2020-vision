@@ -2,7 +2,9 @@ use std::{env, fs, io::prelude::*};
 
 use anyhow::{bail, Context, Result};
 use opencv::{
-    calib3d,
+    calib3d::{
+        self, CALIB_CB_ACCURACY, CALIB_CB_EXHAUSTIVE, CALIB_CB_MARKER, CALIB_CB_NORMALIZE_IMAGE,
+    },
     core::{Mat, Point3f, Size, TermCriteria, TermCriteria_Type},
     imgcodecs::{self, IMREAD_GRAYSCALE},
     prelude::*,
@@ -75,15 +77,15 @@ fn main() -> Result<()> {
         }
     };
 
-    let num_images = image_paths.len();
-    let template_obj_points = compute_checkerboard_obj_points(
-        config.square_size_mm / 1000.,
-        config.board_rows,
-        config.board_cols,
-    );
+    let board_rows = config.board_rows - 1;
+    let board_cols = config.board_cols - 1;
 
-    let mut obj_points = Vec::<VectorOfPoint3f>::with_capacity(num_images);
-    let mut img_points = Vec::<VectorOfPoint2f>::with_capacity(num_images);
+    let num_images = image_paths.len();
+    let template_obj_points =
+        compute_checkerboard_obj_points(config.square_size_mm / 1000., board_cols, board_rows);
+
+    let mut object_points = VectorOfVectorOfPoint3f::with_capacity(num_images);
+    let mut image_points = VectorOfVectorOfPoint2f::with_capacity(num_images);
 
     let resolution = config.camera.resolution;
     let image_size = Size::new(resolution.0 as i32, resolution.1 as i32);
@@ -97,11 +99,11 @@ fn main() -> Result<()> {
         }
 
         let mut corners = VectorOfPoint2f::new();
-        let found = calib3d::find_chessboard_corners(
+        let found = calib3d::find_chessboard_corners_sb(
             &image,
             Size::new(config.board_rows as i32, config.board_cols as i32),
             &mut corners,
-            0,
+            CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY | CALIB_CB_MARKER,
         )
         .context("finding checkerboard corners")?;
 
@@ -110,17 +112,17 @@ fn main() -> Result<()> {
             continue;
         }
 
-        obj_points.push(VectorOfPoint3f::from_iter(template_obj_points.clone()));
-        img_points.push(corners);
+        object_points.push(VectorOfPoint3f::from_iter(template_obj_points.clone()));
+        image_points.push(corners);
     }
 
     println!(
         "successfully performed corner-finding on {} images",
-        img_points.len()
+        image_points.len()
     );
 
-    if img_points.len() < 3 {
-        bail!("insufficient successful corner-finding results to continue to calibration.");
+    if image_points.len() < 3 {
+        bail!("insufficient successful corner-finding results to continue to calibration");
     }
 
     let mut camera_matrix = Mat::default();
@@ -129,8 +131,8 @@ fn main() -> Result<()> {
     let mut tvecs = Mat::default();
 
     let reproj_error = calib3d::calibrate_camera(
-        &VectorOfVectorOfPoint3f::from_iter(obj_points),
-        &VectorOfVectorOfPoint2f::from_iter(img_points),
+        &object_points,
+        &image_points,
         image_size,
         &mut camera_matrix,
         &mut dist_coeffs,
