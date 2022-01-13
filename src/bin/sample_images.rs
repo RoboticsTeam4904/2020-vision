@@ -50,7 +50,8 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    const METADATA_FILE: &str = "metadata.json";
+    const IMAGE_FORMAT: &str = "png";
+    const METADATA_FILENAME: &str = "metadata.json";
 
     let args = Args::try_parse()?;
 
@@ -96,7 +97,7 @@ fn main() -> Result<()> {
         .read(true)
         .write(true)
         .create(true)
-        .open(METADATA_FILE)
+        .open(METADATA_FILENAME)
         .unwrap();
 
     let mut metadata_str = String::new();
@@ -119,6 +120,7 @@ fn main() -> Result<()> {
         imgcodecs::imwrite(
             output_dir
                 .join(format!("{}_{}", params.label, index))
+                .with_extension(IMAGE_FORMAT)
                 .to_str()
                 .unwrap(),
             &*image_mat,
@@ -141,7 +143,7 @@ fn main() -> Result<()> {
     let metadata_file = fs::OpenOptions::new()
         .truncate(true)
         .write(true)
-        .open("sample-images/metadata.json")?;
+        .open(output_dir.join(METADATA_FILENAME))?;
 
     serde_json::to_writer_pretty(metadata_file, &metadata)?;
 
