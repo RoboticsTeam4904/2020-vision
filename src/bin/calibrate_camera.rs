@@ -1,14 +1,13 @@
-use std::{env, fs, io::prelude::*};
+use std::{env, fs, io::prelude::*, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
 use opencv::{
     calib3d::{
         self, CALIB_CB_ACCURACY, CALIB_CB_EXHAUSTIVE, CALIB_CB_MARKER, CALIB_CB_NORMALIZE_IMAGE,
     },
-    core::{Mat, Point3f, Size, TermCriteria, TermCriteria_Type},
-    imgcodecs::{self, IMREAD_GRAYSCALE},
+    core::{Mat, Point2f, Point3f, Size, TermCriteria, TermCriteria_Type, Vector},
+    imgcodecs::{self, IMREAD_COLOR},
     prelude::*,
-    types::{VectorOfPoint2f, VectorOfPoint3f, VectorOfVectorOfPoint2f, VectorOfVectorOfPoint3f},
 };
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -24,8 +23,8 @@ struct Config {
     camera: CameraConfig,
 }
 
-fn compute_checkerboard_obj_points(square_size: f32, width: u8, height: u8) -> Vec<Point3f> {
-    let mut obj_points = Vec::with_capacity((width * height) as usize);
+fn compute_checkerboard_obj_points(square_size: f32, width: u8, height: u8) -> Vector<Point3f> {
+    let mut obj_points = Vector::with_capacity((width * height) as usize);
 
     for row in 0..height {
         for col in 0..width {
@@ -45,7 +44,7 @@ fn main() -> Result<()> {
 
     let config_path = args.next().expect("Expected config path as first arg");
 
-    let image_paths = args.collect::<Vec<_>>();
+    let image_paths = args.map(PathBuf::from).collect::<Vec<_>>();
 
     if image_paths.len() < 2 {
         panic!("Expected at least 2 images");
@@ -84,35 +83,46 @@ fn main() -> Result<()> {
     let template_obj_points =
         compute_checkerboard_obj_points(config.square_size_mm / 1000., board_cols, board_rows);
 
-    let mut object_points = VectorOfVectorOfPoint3f::with_capacity(num_images);
-    let mut image_points = VectorOfVectorOfPoint2f::with_capacity(num_images);
+    let mut object_points: Vector<Vector<Point3f>> = Vector::with_capacity(num_images);
+    let mut image_points: Vector<Vector<Point2f>> = Vector::with_capacity(num_images);
 
     let resolution = config.camera.resolution;
     let image_size = Size::new(resolution.0 as i32, resolution.1 as i32);
+    let pattern_size = Size::new(board_rows as i32, board_cols as i32);
 
     for path in image_paths {
-        let image =
-            imgcodecs::imread(&path, IMREAD_GRAYSCALE).context("reading image from disk")?;
+        let image = imgcodecs::imread(&path.to_str().unwrap(), IMREAD_COLOR)
+            .context("reading image from disk")?;
 
         if image.size().unwrap() != image_size {
             bail!("Expected all images to be the same size");
         }
 
-        let mut corners = VectorOfPoint2f::new();
+        let mut corners: Vector<Point2f> = Vector::new();
         let found = calib3d::find_chessboard_corners_sb(
             &image,
-            Size::new(config.board_rows as i32, config.board_cols as i32),
+            pattern_size.clone(),
             &mut corners,
             CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY | CALIB_CB_MARKER,
         )
         .context("finding checkerboard corners")?;
 
+        // TODO: this debug section should be behind a command line flag
+        let mut image_debug = image.clone();
+        calib3d::draw_chessboard_corners(&mut image_debug, pattern_size.clone(), &corners, found)
+            .context("drawing checkerboard corners")?;
+
+        let parent_dir = path.parent().unwrap();
+        let out_path = parent_dir.join("/debug").join(path.file_name().unwrap());
+        imgcodecs::imwrite(&out_path.to_str().unwrap(), &image_debug, &Vector::new())
+            .context("writing debug image to disk")?;
+
         if !found {
-            println!("failed to find checkerboard corners for image: {}", path);
+            println!("failed to find checkerboard corners for image: {:?}", path);
             continue;
         }
 
-        object_points.push(VectorOfPoint3f::from_iter(template_obj_points.clone()));
+        object_points.push(template_obj_points.clone());
         image_points.push(corners);
     }
 
