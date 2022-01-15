@@ -3,7 +3,8 @@ use std::{env, fs, io::prelude::*, path::PathBuf};
 use anyhow::{bail, Context, Result};
 use opencv::{
     calib3d::{
-        self, CALIB_CB_ACCURACY, CALIB_CB_EXHAUSTIVE, CALIB_CB_MARKER, CALIB_CB_NORMALIZE_IMAGE,
+        self, CALIB_CB_ACCURACY, CALIB_CB_EXHAUSTIVE, CALIB_CB_LARGER, CALIB_CB_MARKER,
+        CALIB_CB_NORMALIZE_IMAGE,
     },
     core::{Mat, Point2f, Point3f, Size, TermCriteria, TermCriteria_Type, Vector},
     imgcodecs::{self, IMREAD_COLOR},
@@ -26,8 +27,8 @@ struct Config {
 fn compute_checkerboard_obj_points(square_size: f32, width: u8, height: u8) -> Vector<Point3f> {
     let mut obj_points = Vector::with_capacity((width * height) as usize);
 
-    for row in 0..height {
-        for col in 0..width {
+    for col in 0..width {
+        for row in 0..height {
             obj_points.push(Point3f::new(
                 square_size * col as f32,
                 square_size * row as f32,
@@ -88,7 +89,7 @@ fn main() -> Result<()> {
 
     let resolution = config.camera.resolution;
     let image_size = Size::new(resolution.0 as i32, resolution.1 as i32);
-    let pattern_size = Size::new(board_rows as i32, board_cols as i32);
+    let pattern_size = Size::new(board_cols as i32, board_rows as i32);
 
     for path in image_paths {
         let image = imgcodecs::imread(&path.to_str().unwrap(), IMREAD_COLOR)
@@ -103,7 +104,11 @@ fn main() -> Result<()> {
             &image,
             pattern_size.clone(),
             &mut corners,
-            CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_EXHAUSTIVE | CALIB_CB_ACCURACY | CALIB_CB_MARKER,
+            CALIB_CB_NORMALIZE_IMAGE
+                | CALIB_CB_EXHAUSTIVE
+                | CALIB_CB_ACCURACY
+                | CALIB_CB_MARKER
+                | CALIB_CB_LARGER,
         )
         .context("finding checkerboard corners")?;
 
@@ -122,6 +127,22 @@ fn main() -> Result<()> {
             continue;
         }
 
+        let mut sharpness = opencv::core::no_array();
+        let sharpness_stats = calib3d::estimate_chessboard_sharpness(
+            &image,
+            pattern_size.clone(),
+            &corners,
+            0.8,
+            false,
+            &mut sharpness,
+        )
+        .context("estimating checkerboard sharpness")?;
+
+        println!(
+            "avg. sharpness: {}, avg. brightness (min, max): ({}, {}) for image: {:?}",
+            sharpness_stats[0], sharpness_stats[1], sharpness_stats[2], path
+        );
+
         object_points.push(template_obj_points.clone());
         image_points.push(corners);
     }
@@ -135,19 +156,25 @@ fn main() -> Result<()> {
         bail!("insufficient successful corner-finding results to continue to calibration");
     }
 
+    // Use the top-right corner of the checkerboard as a fixed point, as recommended by the documentation for `calibrate_camera_ro`.
+    let i_fixed_point = (template_obj_points.len() - 2) as i32;
+
     let mut camera_matrix = Mat::default();
     let mut dist_coeffs = Mat::default();
     let mut rvecs = Mat::default();
     let mut tvecs = Mat::default();
+    let mut new_obj_points = opencv::core::no_array();
 
-    let reproj_error = calib3d::calibrate_camera(
+    let reproj_error = calib3d::calibrate_camera_ro(
         &object_points,
         &image_points,
         image_size,
+        i_fixed_point,
         &mut camera_matrix,
         &mut dist_coeffs,
         &mut rvecs,
         &mut tvecs,
+        &mut new_obj_points,
         0,
         // Listed as the default TermCriteria for this method in the OpenCV docs.
         TermCriteria::new(
