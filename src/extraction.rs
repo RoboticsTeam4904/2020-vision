@@ -91,13 +91,13 @@ impl RFTapeTarget for Hub4TapesTarget {
         }
 
         impl ContourComparison {
-            fn slope_to(self, contour: ContourComparison) -> f64 {
+            fn slope_to(&self, contour: &ContourComparison) -> f64 {
                 let rise = contour.centroid.1 - self.centroid.1;
                 let run = contour.centroid.0 - self.centroid.0;
                 rise as f64 / run as f64
             }
 
-            fn distance_to(self, contour: ContourComparison) -> f64 {
+            fn distance_to(&self, contour: &ContourComparison) -> f64 {
                 let x = contour.centroid.0 - self.centroid.0;
                 let y = contour.centroid.1 - self.centroid.1;
                 ((x.pow(2) + y.pow(2)) as f64).sqrt()
@@ -137,16 +137,18 @@ impl RFTapeTarget for Hub4TapesTarget {
             });
         }
 
-        contours_candidates.sort_by(|&a, &b| b.area.partial_cmp(&a.area).unwrap());
+        contours_candidates.sort_by(|a, b| b.area.partial_cmp(&a.area).unwrap());
 
-        for (idx, &center_candidate) in contours_candidates.iter().enumerate() {
+        for (idx, center_candidate) in contours_candidates.iter().enumerate() {
             let mut target_contours = vec![center_candidate];
-            contours_candidates.sort_by(|&a, &b| {
+
+            let mut contours_by_distance: Vec<_> =
+                contours_candidates[(idx + 1)..].iter().collect();
+            contours_by_distance.sort_by(|&a, &b| {
                 a.distance_to(center_candidate)
                     .partial_cmp(&b.distance_to(center_candidate))
                     .unwrap()
             });
-            let contours_by_distance = &contours_candidates[(idx + 1)..];
 
             for &contour in contours_by_distance.iter() {
                 let relevent_index = if contour.centroid.0 < center_candidate.centroid.0 {
@@ -175,8 +177,8 @@ impl RFTapeTarget for Hub4TapesTarget {
             if (6..9).contains(&target_contours.len()) {
                 return Ok(VectorOfVectorOfPoint::from_iter(
                     target_contours
-                        .iter()
-                        .map(|contour_comparison| contour_comparison.contour),
+                        .into_iter()
+                        .map(|contour_comparison| contour_comparison.contour.clone()),
                 ));
             }
         }
