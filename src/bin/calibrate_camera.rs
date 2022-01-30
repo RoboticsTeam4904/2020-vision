@@ -73,8 +73,8 @@ fn main() -> Result<()> {
     let template_obj_points =
         compute_checkerboard_obj_points(args.square_size_mm / 1000., board_cols, board_rows);
 
-    let mut object_points: Vector<Vector<Point3f>> = Vector::with_capacity(num_images);
-    let mut image_points: Vector<Vector<Point2f>> = Vector::with_capacity(num_images);
+    let mut object_points = Vector::<Vector<Point3f>>::with_capacity(num_images);
+    let mut image_points = Vector::<Vector<Point2f>>::with_capacity(num_images);
 
     let mut image_size = None;
     let pattern_size = Size::new(board_cols as i32, board_rows as i32);
@@ -89,7 +89,7 @@ fn main() -> Result<()> {
             bail!("Expected all images to be the same size. Failed on image: {path:?}");
         }
 
-        let mut corners: Vector<Point2f> = Vector::new();
+        let mut corners = Vector::<Point2f>::new();
         let found = calib3d::find_chessboard_corners_sb(
             &image,
             pattern_size,

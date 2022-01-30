@@ -31,20 +31,20 @@ struct ImageMetadata {
     exposure: f64,
 }
 
-// Captures a set of sample images.
+// Captures a set of sample images
 #[derive(Debug, Parser)]
 #[clap(about)]
 struct Args {
-    /// Specifies the amount of time, in ms, to wait between captures.
+    /// Specifies the amount of time, in ms, to wait between captures
     #[clap(short, long, name = "delay")]
     delay_ms: Option<u64>,
 
-    /// The path to read input parameters for.
-    /// If the target file does not exist, a template will be created upon the first run.
+    /// The path to read input parameters for
+    /// If the target file does not exist, a template will be created upon the first run
     #[clap(parse(from_os_str))]
     params_file: PathBuf,
 
-    /// The directory to output images and corresponding metadata to.
+    /// The directory to output images and corresponding metadata to
     #[clap(parse(from_os_str))]
     output_dir: PathBuf,
 }
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     const IMAGE_FORMAT: &str = "png";
     const METADATA_FILENAME: &str = "metadata.json";
 
-    let args = Args::try_parse()?;
+    let args = Args::parse();
 
     let mut params_file = fs::OpenOptions::new()
         .read(true)
