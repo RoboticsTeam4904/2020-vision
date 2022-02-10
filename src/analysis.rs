@@ -14,27 +14,27 @@ use stdvis_core::{
 
 use stdvis_opencv::convert::AsArrayView;
 
-const HIGH_PORT_OBJECT_POINTS: &[(f32, f32)] = &[
-    (0.5, 0.2165),
-    (0.4414, 0.2165),
-    (0.2207, -0.1657),
-    (-0.2207, -0.1657),
-    (-0.4414, 0.2165),
-    (-0.5, 0.2165),
-    (-0.25, -0.2165),
-    (0.25, -0.2165),
-    (0.3333, 0.0721), // symmetry-breaking point
-];
-const LOADING_PORT_OBJECT_POINTS: &[(f32, f32)] = &[
-    (0.0889, 0.1397),
-    (-0.0889, 0.1397),
-    (-0.0889, -0.1397),
-    (0.0889, -0.1397),
-    (0.0381, 0.0889),
-    (-0.0381, 0.0889),
-    (-0.0381, -0.0889),
-    (0.0381, -0.0889),
-    (-0.0254, -0.2286), // symmetry-breaking point
+const HUB_4_TAPES_OBJECT_POINTS: &[(f32, f32, f32)] = &[
+    // left to right
+    (-12.686, 1.0, 0.1465),
+    (-16.837, 1.0, 2.9205),
+    (-16.837, -1.0, 2.9205),
+    (-12.686, -1.0, 0.1465),
+    //
+    (-2.735, 1.0, -2.9205),
+    (-7.632, 1.0, -1.9465),
+    (-7.632, -1.0, -1.9465),
+    (-2.735, -1.0, -2.9205),
+    //
+    (7.632, 1.0, -1.9465),
+    (2.735, 1.0, -2.9205),
+    (2.735, -1.0, -2.9205),
+    (7.632, -1.0, -1.9465),
+    //
+    (16.837, 1.0, 2.9205),
+    (12.686, 1.0, 0.1465),
+    (12.686, -1.0, 0.1465),
+    (16.837, -1.0, 2.9205),
 ];
 
 pub struct PnPParams<'src> {
@@ -51,34 +51,25 @@ pub struct PnPResult {
 }
 
 pub struct WallTapeContourAnalyzer {
-    high_port_object_points: VectorOfPoint3f,
-    loading_port_object_points: VectorOfPoint3f,
+    hub_4_tapes_object_points: VectorOfPoint3f,
 }
 
 impl WallTapeContourAnalyzer {
     pub fn new() -> Self {
-        let high_port_object_points = VectorOfPoint3f::from_iter(
-            HIGH_PORT_OBJECT_POINTS
+        let hub_4_tapes_object_points = VectorOfPoint3f::from_iter(
+            HUB_4_TAPES_OBJECT_POINTS
                 .iter()
-                .map(|point| Point3f::new(point.0, point.1, 0.)),
-        );
-
-        let loading_port_object_points = VectorOfPoint3f::from_iter(
-            LOADING_PORT_OBJECT_POINTS
-                .iter()
-                .map(|point| Point3f::new(point.0, point.1, 0.)),
+                .map(|point| Point3f::new(point.0, point.1, point.2)),
         );
 
         WallTapeContourAnalyzer {
-            high_port_object_points,
-            loading_port_object_points,
+            hub_4_tapes_object_points,
         }
     }
 
     pub fn make_pnp_params<'src>(&'src self, contour_group: &'src ContourGroup) -> PnPParams<'src> {
         let obj_points = match contour_group.id {
-            0 => &self.high_port_object_points,
-            1 => &self.loading_port_object_points,
+            0 => &self.hub_4_tapes_object_points,
             _ => panic!("Unknown contour group type"),
         };
 
@@ -131,7 +122,7 @@ impl WallTapeContourAnalyzer {
             &mut rvec_mats,
             &mut tvec_mats,
             false,
-            SolvePnPMethod::SOLVEPNP_IPPE,
+            SolvePnPMethod::SOLVEPNP_EPNP,
             &opencv::core::no_array(),
             &opencv::core::no_array(),
             &mut opencv::core::no_array(),

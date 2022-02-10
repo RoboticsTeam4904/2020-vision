@@ -3,7 +3,7 @@ use std::ops::{Range, RangeFrom};
 use anyhow::Result;
 
 use opencv::{
-    core::{Point, Point2f, Size, TermCriteria, TermCriteria_Type},
+    core::{Point, Point2f, Scalar, Size, TermCriteria, TermCriteria_Type},
     imgproc,
     prelude::*,
     types::{VectorOfPoint, VectorOfPoint2f, VectorOfVec4i, VectorOfVectorOfPoint},
@@ -64,26 +64,53 @@ trait RFTapeTarget {
         Ok(rect_size.width / rect_size.height)
     }
 
-    /// Filter a set of `contours`, returning `true` if they are of this type or `false` otherwise.
-    fn filter(contours: &VectorOfVectorOfPoint) -> Result<VectorOfVectorOfPoint>;
+    /// Filter out contours by solidity, aspect ratio, and area
+    fn heuristic_filter(contours: &VectorOfVectorOfPoint) -> Result<VectorOfVectorOfPoint>;
+
+    /// Filter contours by criteria specific to that
+    fn specific_filter(contours: &VectorOfVectorOfPoint) -> Result<VectorOfVectorOfPoint>;
 }
 
 struct Hub4TapesTarget;
 
 impl Hub4TapesTarget {
     const SOLIDITY_RANGE: Range<f64> = 0.8..1.0;
-    const ASPECT_RATIO_RANGE: Range<f32> = 0.0..2.5;
-    const AREA_RANGE: RangeFrom<f64> = 0.0..; // TODO: get actual range
-                                              // stuff between tapes
-    const SLOPE_RANGE: Range<f64> = 0.0..3.0; // TODO: get actual range
-    const DISTANCE_RANGE: Range<f64> = 20.0..140.0; // TODO: get actual range
+    const ASPECT_RATIO_RANGE: Range<f32> = 0.0..3.7; // can tweak this more prob
+    const AREA_RANGE: RangeFrom<f64> = 0.0..;
+    const SLOPE_RANGE: Range<f64> = -0.5..1.0;
+    const DISTANCE_RANGE: Range<f64> = 20.0..300.0;
 }
 
 impl RFTapeTarget for Hub4TapesTarget {
     const TYPE: u8 = 0;
     const NUM_VERTICES: usize = 4;
 
-    fn filter(contours: &VectorOfVectorOfPoint) -> Result<VectorOfVectorOfPoint> {
+    fn heuristic_filter(contours: &VectorOfVectorOfPoint) -> Result<VectorOfVectorOfPoint> {
+        let mut filtered_contours = Vec::new();
+        for contour in contours {
+            let area = imgproc::contour_area(&contour, false)?;
+
+            if !Self::AREA_RANGE.contains(&area) {
+                continue;
+            }
+
+            if !Self::SOLIDITY_RANGE.contains(&Self::calc_solidity(&contour, None)?) {
+                continue;
+            }
+
+            if !Self::ASPECT_RATIO_RANGE.contains(&Self::calc_aspect_ratio(&contour)?) {
+                continue;
+            }
+
+            filtered_contours.push(contour);
+        }
+
+        return Ok(VectorOfVectorOfPoint::from_iter(
+            filtered_contours.into_iter().map(|contour| contour),
+        ));
+    }
+
+    fn specific_filter(contours: &VectorOfVectorOfPoint) -> Result<VectorOfVectorOfPoint> {
         struct ContourComparison {
             contour: VectorOfPoint,
             area: f64,
@@ -104,22 +131,10 @@ impl RFTapeTarget for Hub4TapesTarget {
             }
         }
 
-        let mut contours_candidates = Vec::new();
+        let mut contour_candidates = Vec::new();
+
         for contour in contours {
             let area = imgproc::contour_area(&contour, false)?;
-
-            if !Self::AREA_RANGE.contains(&area) {
-                continue;
-            }
-
-            if !Self::SOLIDITY_RANGE.contains(&Self::calc_solidity(&contour, None)?) {
-                continue;
-            }
-
-            if !Self::ASPECT_RATIO_RANGE.contains(&Self::calc_aspect_ratio(&contour)?) {
-                continue;
-            }
-
             let num_points = contour.len();
             let mut centroid = contour
                 .iter()
@@ -130,20 +145,19 @@ impl RFTapeTarget for Hub4TapesTarget {
                 centroid.1 / num_points as i32,
             );
 
-            contours_candidates.push(ContourComparison {
+            contour_candidates.push(ContourComparison {
                 contour,
                 area,
                 centroid,
             });
         }
 
-        contours_candidates.sort_by(|a, b| b.area.partial_cmp(&a.area).unwrap());
+        contour_candidates.sort_by(|a, b| b.area.partial_cmp(&a.area).unwrap());
 
-        for (idx, center_candidate) in contours_candidates.iter().enumerate() {
+        for (idx, center_candidate) in contour_candidates.iter().enumerate() {
             let mut target_contours = vec![center_candidate];
 
-            let mut contours_by_distance: Vec<_> =
-                contours_candidates[(idx + 1)..].iter().collect();
+            let mut contours_by_distance: Vec<_> = contour_candidates[(idx + 1)..].iter().collect();
             contours_by_distance.sort_by(|&a, &b| {
                 a.distance_to(center_candidate)
                     .partial_cmp(&b.distance_to(center_candidate))
@@ -151,35 +165,46 @@ impl RFTapeTarget for Hub4TapesTarget {
             });
 
             for &contour in contours_by_distance.iter() {
-                let relevent_index = if contour.centroid.0 < center_candidate.centroid.0 {
-                    0
+                if contour.centroid.0 < center_candidate.centroid.0 {
+                    // if to the left
+                    if !Self::SLOPE_RANGE.contains(&-target_contours[0].slope_to(contour)) {
+                        continue;
+                    }
+
+                    if !Self::DISTANCE_RANGE.contains(&target_contours[0].distance_to(contour)) {
+                        continue;
+                    }
+
+                    if target_contours[0].area < contour.area {
+                        continue;
+                    }
+
+                    target_contours.insert(0, contour);
                 } else {
-                    target_contours.len()
-                };
+                    let last_idx = target_contours.len() - 1;
+                    if !Self::SLOPE_RANGE.contains(&target_contours[last_idx].slope_to(contour)) {
+                        continue;
+                    }
 
-                if !Self::SLOPE_RANGE.contains(&target_contours[relevent_index].slope_to(contour)) {
-                    continue;
+                    if !Self::DISTANCE_RANGE
+                        .contains(&target_contours[last_idx].distance_to(contour))
+                    {
+                        continue;
+                    }
+
+                    if target_contours[last_idx].area < contour.area {
+                        continue;
+                    }
+
+                    target_contours.push(contour);
                 }
-
-                if !Self::DISTANCE_RANGE
-                    .contains(&target_contours[relevent_index].distance_to(contour))
-                {
-                    continue;
+                if target_contours.len() == 4 {
+                    return Ok(VectorOfVectorOfPoint::from_iter(
+                        target_contours
+                            .into_iter()
+                            .map(|contour_comparison| contour_comparison.contour.clone()),
+                    ));
                 }
-
-                if target_contours[relevent_index].area < contour.area {
-                    continue;
-                }
-
-                target_contours.insert(relevent_index, contour);
-            }
-
-            if (6..9).contains(&target_contours.len()) {
-                return Ok(VectorOfVectorOfPoint::from_iter(
-                    target_contours
-                        .into_iter()
-                        .map(|contour_comparison| contour_comparison.contour.clone()),
-                ));
             }
         }
         Ok(VectorOfVectorOfPoint::new())
@@ -204,6 +229,41 @@ impl RFTapeContourExtractor {
         .unwrap();
 
         Self { morph_elem }
+    }
+
+    fn write_contours(
+        &self,
+        grayscale_image_mat: &MatImpl,
+        contours: &VectorOfVectorOfPoint,
+        color: Scalar,
+        filename: &str,
+    ) -> Result<()> {
+        let mut image = default_mat();
+        imgproc::cvt_color(
+            &grayscale_image_mat.clone(),
+            &mut image,
+            imgproc::COLOR_GRAY2BGR,
+            0,
+        )?;
+
+        imgproc::draw_contours(
+            &mut image,
+            &contours,
+            -1,
+            color,
+            10,
+            imgproc::LINE_8,
+            &VectorOfVec4i::new(),
+            imgproc::INTER_MAX,
+            Point::new(0, 0),
+        )?;
+        opencv::imgcodecs::imwrite(
+            filename,
+            &image,
+            &opencv::types::VectorOfi32::with_capacity(0),
+        )?;
+
+        Ok(())
     }
 
     /// Threshold (binarize) `image` such that only regions with the expected green tape color are white.
@@ -428,8 +488,27 @@ impl RFTapeContourExtractor {
         camera: &'src CameraConfig,
     ) -> Result<Vec<ContourGroup<'src>>> {
         let mut result_groups = Vec::new();
+        let heuristic_filtered_contours = Target::heuristic_filter(contour_groups)?;
 
-        let target_contours = Target::filter(contour_groups)?;
+        self.write_contours(
+            grayscale_image_mat,
+            &heuristic_filtered_contours,
+            Scalar::new(255.0, 0.0, 0.0, 0.0),
+            "heuristic_filter.png",
+        )?;
+
+        let target_contours = Target::specific_filter(&heuristic_filtered_contours)?;
+
+        self.write_contours(
+            grayscale_image_mat,
+            &target_contours,
+            Scalar::new(0.0, 255.0, 0.0, 0.0),
+            "full_filter.png",
+        )?;
+
+        if target_contours.len() == 0 {
+            return Ok(result_groups);
+        }
 
         if let Some(contours) =
             self.normalize_contours(&target_contours, grayscale_image_mat, Target::NUM_VERTICES)?
@@ -467,6 +546,13 @@ impl ContourExtractor for RFTapeContourExtractor {
         let contour_groups = self.find_contours(&denoised_image)?;
 
         let grayscale_image_mat = self.grayscale_image(&image_mat)?;
+
+        self.write_contours(
+            &grayscale_image_mat,
+            &contour_groups,
+            Scalar::new(0.0, 0.0, 255.0, 0.0),
+            "unfiltered.png",
+        )?;
 
         let hub_contours = self
             .extract_matching_contours::<Hub4TapesTarget>(
