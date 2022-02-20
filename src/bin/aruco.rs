@@ -4,15 +4,13 @@ use opencv::{
         self, detect_markers, draw_detected_markers, estimate_pose_single_markers,
         DetectorParameters,
     },
-    calib3d::rodrigues,
-    core::{no_array, Point2f, Scalar, Vec3d, Vector},
+    calib3d::{decompose_projection_matrix, rodrigues},
+    core::{hconcat, no_array, Point2f, Scalar, Vec3d, Vector},
     prelude::Mat,
+    types::VectorOfMat,
 };
 use serde_json;
-use std::{
-    fs::File,
-    ops::{Deref, DerefMut},
-};
+use std::{f64::consts::PI, fs::File, ops::DerefMut};
 use stdvis_core::{traits::Camera, types::VisionTarget};
 use stdvis_opencv::{
     camera::OpenCVCamera,
@@ -99,38 +97,51 @@ fn main() -> Result<()> {
             let mut jacobian_mat = Mat::default();
             rodrigues(&rvec_vec, &mut rmat_mat, &mut jacobian_mat)?;
 
-            let tvec_mat = Mat::from_exact_iter(rvec_vec.into_iter())?;
+            let tvec_mat = Mat::from_exact_iter(tvec_vec.into_iter())?;
+            // let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
 
-            // let tvec_mat = Mat::from_slice(rvec_vec.as_slice())?;
+            let mut mat_array = VectorOfMat::new();
+            mat_array.push(rmat_mat);
+            mat_array.push(tvec_mat);
 
-            let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
-            let rmat = rmat_mat.as_array_view::<f64>().into_shape((3, 3))?;
-            let rmat_t = rmat.t();
+            let mut proj_mat = Mat::default();
+            hconcat(&mat_array, &mut proj_mat)?;
 
-            let camera_pose = rmat_t.dot(&tvec);
+            let mut camera_matrix = Mat::default();
+            let mut rot_matrix = Mat::default();
+            let mut trans_vect = Mat::default();
+            let mut rot_matrix_x = Mat::default();
+            let mut rot_matrix_y = Mat::default();
+            let mut rot_matrix_z = Mat::default();
+            let mut euler_angles_mat = Mat::default();
+            decompose_projection_matrix(
+                &proj_mat,
+                &mut camera_matrix,
+                &mut rot_matrix,
+                &mut trans_vect,
+                &mut rot_matrix_x,
+                &mut rot_matrix_y,
+                &mut rot_matrix_z,
+                &mut euler_angles_mat,
+            )?;
 
-            let x = camera_pose[[0, 0]];
-            let y = camera_pose[[1, 0]];
-            let z = camera_pose[[2, 0]];
+            let x = tvec_vec.get(0).unwrap();
+            let y = tvec_vec.get(1).unwrap();
+            let z = tvec_vec.get(2).unwrap();
 
-            let theta = x.atan2(z);
+            let theta = x.atan2(*z) * 180. / PI;
 
-            let r00 = rmat[[0, 0]];
-            let r10 = rmat[[1, 0]];
-            let r20 = rmat[[2, 0]];
-            let r21 = rmat[[2, 1]];
-            let r22 = rmat[[2, 2]];
-
-            let roll = r10.atan2(r00);
-            let pitch = -r20.atan2((r21.powf(2.) + r22.powf(2.)).sqrt());
-            let yaw = r21.atan2(r22);
+            let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
+            let roll = euler_angles[[2, 0]];
+            let pitch = euler_angles[[0, 0]];
+            let yaw = euler_angles[[1, 0]];
 
             let target = VisionTarget {
                 id: 0,
                 theta: theta,
                 beta: yaw,
-                dist: z,
-                height: y,
+                dist: *z,
+                height: *y,
                 confidence: 0.,
             };
 
