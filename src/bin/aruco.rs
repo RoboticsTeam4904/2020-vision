@@ -178,11 +178,57 @@ fn write_poses(image: &Image<MatImageData>, aruco_result: &ArucoPoseResult) -> R
     Ok(())
 }
 
-fn find_center(target: VisionTarget) -> (f64, f64) {
-    let hoop_rad:f64 = 0.61;
-    let rad_theta:f64 = target.theta * PI / 180.;
-    let rad_beta:f64 = target.beta * PI / 180.;
-    (target.dist * rad_theta.sin() + hoop_rad * rad_beta.sin(), target.dist * rad_theta.cos() + hoop_rad * rad_beta.cos())
+fn find_center(target: VisionTarget) -> VisionTarget {
+    let hoop_rad: f64 = 0.61;
+    let rad_theta: f64 = target.theta * PI / 180.;
+    let rad_beta: f64 = target.beta * PI / 180.;
+
+    let dx = target.dist * rad_theta.sin() + hoop_rad * rad_beta.sin();
+    let dy = target.dist * rad_theta.cos() + hoop_rad * rad_beta.cos();
+    
+    let dist = (dx.powi(2) + dy.powi(2)).sqrt();
+    let theta = atan2(dy, dx) * 180. / PI;
+
+    let center = VisionTarget {
+        id: target.id,
+        theta: theta,
+        beta: 0,
+        dist: dist,
+        height: target.height,
+        confidence: 0.,
+    };
+
+    center
+}
+
+fn find_average(targets: Vec(VisionTarget)) -> VisionTarget {
+    let mut sum_x: f64 = 0.;
+    let mut sum_y: f64 = 0.; 
+    for target in targets.iter() {
+        let center = find_center(target);
+        let rad_theta: f64 = center.theta * PI / 180.;
+
+        let center_x = center.dist * rad_theta.sin();
+        let center_y = center.dist * rad_theta.cos();
+
+        sum_x += center_x;
+        sum_y += center_y;
+    }
+    let dx = sum_x / targets.len();
+    let dy = sum_y / targets.len();
+
+    let dist = (dx.powi(2) + dy.powi(2)).sqrt();
+    let theta = atan2(dy, dx) * 180. / PI;
+    
+    let average = VisionTarget {
+        id: 0,
+        theta: theta,
+        beta: 0,
+        dist: dist,
+        height: targets[0].height,
+        confidence: 0.,
+    };
+
 }
 
 fn main() -> Result<()> {
