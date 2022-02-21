@@ -17,6 +17,13 @@ use stdvis_opencv::{
     convert::{AsArrayView, AsMatView},
 };
 
+fn find_center(target: VisionTarget) -> (f64, f64) {
+    let hoop_rad:f64 = 0.61;
+    let rad_theta:f64 = target.theta * PI / 180.;
+    let rad_beta:f64 = target.beta * PI / 180.;
+    (target.dist * rad_theta.sin() + hoop_rad * rad_beta.sin(), target.dist * rad_theta.cos() + hoop_rad * rad_beta.cos())
+}
+
 fn main() -> Result<()> {
     let config_file = File::open("config.json")?;
     let config = serde_json::from_reader(config_file)?;
