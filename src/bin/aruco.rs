@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use opencv::{
     aruco::{
-        self, detect_markers, draw_detected_markers, estimate_pose_single_markers,
-        DetectorParameters,
+        self, detect_markers, draw_detected_markers, estimate_pose_board,
+        estimate_pose_single_markers, DetectorParameters,
     },
     calib3d::{decompose_projection_matrix, rodrigues},
     core::{hconcat, no_array, Point2f, Scalar, Vec3d, Vector},
@@ -13,22 +13,25 @@ use serde_json;
 use std::{f64::consts::PI, fs::File, ops::DerefMut};
 use stdvis_core::{
     traits::Camera,
-    types::{Image, VisionTarget},
+    types::{CameraConfig, Image, VisionTarget},
 };
 use stdvis_opencv::{
     camera::{MatImageData, OpenCVCamera},
     convert::{AsArrayView, AsMatView},
 };
 pub struct ArucoPoseResult {
-    pub intrinsic_matrix: Mat,
-    pub distortion_coeffs: Mat,
     pub rvecs: Vector<Vec3d>,
     pub tvecs: Vector<Vec3d>,
-    pub ids: Vector<i32>,
     pub corners: Vector<Vector<Point2f>>,
+    pub ids: Vector<i32>,
 }
 
-fn find_pose(image: &Image<MatImageData>) -> Result<ArucoPoseResult> {
+// find where the markers are in the image
+fn extract_markers(
+    image: &Image<MatImageData>,
+    intrinsic_matrix: &Mat,
+    distortion_coeffs: &Mat,
+) -> Result<(Vector<Vector<Point2f>>, Vector<i32>)> {
     let mat_image = image.as_mat_view();
     let dictionary =
         aruco::get_predefined_dictionary(aruco::PREDEFINED_DICTIONARY_NAME::DICT_4X4_50)?;
@@ -36,17 +39,6 @@ fn find_pose(image: &Image<MatImageData>) -> Result<ArucoPoseResult> {
     let mut ids = Vector::<i32>::new();
     let params = DetectorParameters::create()?;
     let mut rejected_img_points = no_array();
-
-    let i = image.camera.intrinsic_matrix.view();
-    let d = image.camera.distortion_coeffs.view();
-
-    let intrinsic_matrix = Mat::from_slice_2d(&[
-        &[i[[0, 0]], i[[0, 1]], i[[0, 2]]],
-        &[i[[1, 0]], i[[1, 1]], i[[1, 2]]],
-        &[i[[2, 0]], i[[2, 1]], i[[2, 2]]],
-    ])?;
-
-    let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap())?;
 
     detect_markers(
         &*mat_image,
@@ -59,6 +51,16 @@ fn find_pose(image: &Image<MatImageData>) -> Result<ArucoPoseResult> {
         &distortion_coeffs,
     )?;
 
+    Ok((corners, ids))
+}
+
+// generate rotation and translation vectors from corners for individual markers
+fn analyze_pose_single(
+    corners: Vector<Vector<Point2f>>,
+    ids: Vector<i32>,
+    intrinsic_matrix: &Mat,
+    distortion_coeffs: &Mat,
+) -> Result<ArucoPoseResult> {
     let mut rvecs = Vector::<Vec3d>::new();
     let mut tvecs = Vector::<Vec3d>::new();
 
@@ -73,8 +75,6 @@ fn find_pose(image: &Image<MatImageData>) -> Result<ArucoPoseResult> {
     )?;
 
     Ok(ArucoPoseResult {
-        intrinsic_matrix,
-        distortion_coeffs,
         rvecs,
         tvecs,
         corners,
@@ -82,6 +82,7 @@ fn find_pose(image: &Image<MatImageData>) -> Result<ArucoPoseResult> {
     })
 }
 
+// find dist, theta, and yaw from rvecs and tvecs
 fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     let mut targets = Vec::new();
 
@@ -146,7 +147,12 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     Ok(targets)
 }
 
-fn write_poses(image: &Image<MatImageData>, aruco_result: &ArucoPoseResult) -> Result<()> {
+fn write_poses(
+    image: &Image<MatImageData>,
+    aruco_result: &ArucoPoseResult,
+    intrinsic_matrix: &Mat,
+    distortion_coeffs: &Mat,
+) -> Result<()> {
     let mut mat_image = image.as_mat_view();
     let mut out_img = mat_image.deref_mut();
 
@@ -160,8 +166,8 @@ fn write_poses(image: &Image<MatImageData>, aruco_result: &ArucoPoseResult) -> R
     for idx in 0..aruco_result.ids.len() {
         opencv::calib3d::draw_frame_axes(
             out_img,
-            &aruco_result.intrinsic_matrix,
-            &aruco_result.distortion_coeffs,
+            &intrinsic_matrix,
+            &distortion_coeffs,
             &aruco_result.rvecs.get(idx)?,
             &aruco_result.tvecs.get(idx)?,
             0.05,
@@ -178,34 +184,35 @@ fn write_poses(image: &Image<MatImageData>, aruco_result: &ArucoPoseResult) -> R
     Ok(())
 }
 
-fn find_center(target: VisionTarget) -> VisionTarget {
-    let hoop_rad: f64 = 0.61;
+fn find_center(target: &VisionTarget) -> VisionTarget {
+    let hoop_rad: f64 = 0.67785;
     let rad_theta: f64 = target.theta * PI / 180.;
     let rad_beta: f64 = target.beta * PI / 180.;
 
     let dx = target.dist * rad_theta.sin() + hoop_rad * rad_beta.sin();
     let dy = target.dist * rad_theta.cos() + hoop_rad * rad_beta.cos();
-    
-    let dist = (dx.powi(2) + dy.powi(2)).sqrt();
-    let theta = atan2(dy, dx) * 180. / PI;
 
-    let center = VisionTarget {
+    let dist = (dx.powi(2) + dy.powi(2)).sqrt();
+    let theta = dy.atan2(dx) * 180. / PI;
+
+    VisionTarget {
         id: target.id,
         theta: theta,
-        beta: 0,
+        beta: 0.,
         dist: dist,
         height: target.height,
         confidence: 0.,
-    };
-
-    center
+    }
 }
 
-fn find_average(targets: Vec(VisionTarget)) -> VisionTarget {
+fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
     let mut sum_x: f64 = 0.;
-    let mut sum_y: f64 = 0.; 
+    let mut sum_y: f64 = 0.;
     for target in targets.iter() {
         let center = find_center(target);
+
+        // dbg!(&center);
+
         let rad_theta: f64 = center.theta * PI / 180.;
 
         let center_x = center.dist * rad_theta.sin();
@@ -214,26 +221,37 @@ fn find_average(targets: Vec(VisionTarget)) -> VisionTarget {
         sum_x += center_x;
         sum_y += center_y;
     }
-    let dx = sum_x / targets.len();
-    let dy = sum_y / targets.len();
+    let dx = sum_x / targets.len() as f64;
+    let dy = sum_y / targets.len() as f64;
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
-    let theta = atan2(dy, dx) * 180. / PI;
-    
-    let average = VisionTarget {
+    let theta = dy.atan2(dx) * 180. / PI;
+
+    VisionTarget {
         id: 0,
         theta: theta,
-        beta: 0,
+        beta: 0.,
         dist: dist,
-        height: targets[0].height,
+        height: 0.,
         confidence: 0.,
-    };
-
+    }
 }
 
 fn main() -> Result<()> {
     let config_file = File::open("config.json")?;
-    let config = serde_json::from_reader(config_file)?;
+    let config: CameraConfig = serde_json::from_reader(config_file)?;
+
+    let i = &config.intrinsic_matrix;
+    let d = &config.distortion_coeffs;
+
+    let intrinsic_matrix = Mat::from_slice_2d(&[
+        &[i[[0, 0]], i[[0, 1]], i[[0, 2]]],
+        &[i[[1, 0]], i[[1, 1]], i[[1, 2]]],
+        &[i[[2, 0]], i[[2, 1]], i[[2, 2]]],
+    ])?;
+
+    let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap())?;
+
     let mut camera = OpenCVCamera::new(config)?;
 
     loop {
@@ -241,11 +259,14 @@ fn main() -> Result<()> {
             .grab_frame()
             .context("Failed to read frame from camera")?;
 
-        let aruco_result = find_pose(&image)?;
+        let (corners, ids) = extract_markers(&image, &intrinsic_matrix, &distortion_coeffs)?;
+        let aruco_result =
+            analyze_pose_single(corners, ids, &intrinsic_matrix, &distortion_coeffs)?;
         let targets = find_targets(&aruco_result)?;
-        write_poses(&image, &aruco_result)?;
+        write_poses(&image, &aruco_result, &intrinsic_matrix, &distortion_coeffs)?;
+        let center = find_average(&targets);
 
-        dbg!(targets);
+        dbg!(center);
 
         println!("-------------------------------");
 
