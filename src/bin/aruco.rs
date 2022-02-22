@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use opencv::{
     aruco::{
         self, detect_markers, draw_detected_markers, estimate_pose_board,
-        estimate_pose_single_markers, DetectorParameters,
+        estimate_pose_single_markers, Board, DetectorParameters,
     },
     calib3d::{decompose_projection_matrix, rodrigues},
-    core::{hconcat, no_array, Point2f, Scalar, Vec3d, Vector},
+    core::{hconcat, no_array, Point2f, Point3f, Scalar, Vec3d, Vector},
     prelude::Mat,
     types::VectorOfMat,
 };
@@ -19,6 +19,109 @@ use stdvis_opencv::{
     camera::{MatImageData, OpenCVCamera},
     convert::{AsArrayView, AsMatView},
 };
+
+// for markers from theta = 0 clockwise, for each marker, top left corner and going counter clockwise
+const ARUCO_BOARD_OBJECT_POINTS: [[(f32, f32, f32); 4]; 16] = [
+    [
+        (0.6778, 0.0, 0.018),
+        (0.6769, 0.036, 0.018),
+        (0.6769, 0.036, -0.018),
+        (0.6778, 0.0, -0.018),
+    ],
+    [
+        (0.6263, 0.2594, 0.018),
+        (0.6116, 0.2923, 0.018),
+        (0.6116, 0.2923, -0.018),
+        (0.6263, 0.2594, -0.018),
+    ],
+    [
+        (0.4793, 0.4793, 0.018),
+        (0.4532, 0.5041, 0.018),
+        (0.4532, 0.5041, -0.018),
+        (0.4793, 0.4793, -0.018),
+    ],
+    [
+        (0.2594, 0.6263, 0.018),
+        (0.2258, 0.6391, 0.018),
+        (0.2258, 0.6391, -0.018),
+        (0.2594, 0.6263, -0.018),
+    ],
+    [
+        (0.0, 0.6778, 0.018),
+        (-0.036, 0.6769, 0.018),
+        (-0.036, 0.6769, -0.018),
+        (0.0, 0.6778, -0.018),
+    ],
+    [
+        (-0.2594, 0.6263, 0.018),
+        (-0.2923, 0.6116, 0.018),
+        (-0.2923, 0.6116, -0.018),
+        (-0.2594, 0.6263, -0.018),
+    ],
+    [
+        (-0.4793, 0.4793, 0.018),
+        (-0.5041, 0.4532, 0.018),
+        (-0.5041, 0.4532, -0.018),
+        (-0.4793, 0.4793, -0.018),
+    ],
+    [
+        (-0.6263, 0.2594, 0.018),
+        (-0.6391, 0.2258, 0.018),
+        (-0.6391, 0.2258, -0.018),
+        (-0.6263, 0.2594, -0.018),
+    ],
+    [
+        (-0.6778, 0.0, 0.018),
+        (-0.6769, -0.036, 0.018),
+        (-0.6769, -0.036, -0.018),
+        (-0.6778, 0.0, -0.018),
+    ],
+    [
+        (-0.6263, -0.2594, 0.018),
+        (-0.6116, -0.2923, 0.018),
+        (-0.6116, -0.2923, -0.018),
+        (-0.6263, -0.2594, -0.018),
+    ],
+    [
+        (-0.4793, -0.4793, 0.018),
+        (-0.4532, -0.5041, 0.018),
+        (-0.4532, -0.5041, -0.018),
+        (-0.4793, -0.4793, -0.018),
+    ],
+    [
+        (-0.2594, -0.6263, 0.018),
+        (-0.2258, -0.6391, 0.018),
+        (-0.2258, -0.6391, -0.018),
+        (-0.2594, -0.6263, -0.018),
+    ],
+    [
+        (-0.0, -0.6778, 0.018),
+        (0.036, -0.6769, 0.018),
+        (0.036, -0.6769, -0.018),
+        (-0.0, -0.6778, -0.018),
+    ],
+    [
+        (0.2594, -0.6263, 0.018),
+        (0.2923, -0.6116, 0.018),
+        (0.2923, -0.6116, -0.018),
+        (0.2594, -0.6263, -0.018),
+    ],
+    [
+        (0.4793, -0.4793, 0.018),
+        (0.5041, -0.4532, 0.018),
+        (0.5041, -0.4532, -0.018),
+        (0.4793, -0.4793, -0.018),
+    ],
+    [
+        (0.6263, -0.2594, 0.018),
+        (0.6391, -0.2258, 0.018),
+        (0.6391, -0.2258, -0.018),
+        (0.6263, -0.2594, -0.018),
+    ],
+];
+
+const ARUCO_BOARD_IDS: [i32; 16] = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48];
+
 pub struct ArucoPoseResult {
     pub rvecs: Vector<Vec3d>,
     pub tvecs: Vector<Vec3d>,
@@ -67,8 +170,8 @@ fn analyze_pose_single(
     estimate_pose_single_markers(
         &corners,
         0.036,
-        &intrinsic_matrix,
-        &distortion_coeffs,
+        intrinsic_matrix,
+        distortion_coeffs,
         &mut rvecs,
         &mut tvecs,
         &mut no_array(),
@@ -77,6 +180,48 @@ fn analyze_pose_single(
     Ok(ArucoPoseResult {
         rvecs,
         tvecs,
+        corners,
+        ids,
+    })
+}
+
+// same thing as `analyze_pose_single` but for a "board" of markers
+fn analyze_pose_board(
+    corners: Vector<Vector<Point2f>>,
+    ids: Vector<i32>,
+    intrinsic_matrix: &Mat,
+    distortion_coeffs: &Mat,
+) -> Result<ArucoPoseResult> {
+    let obj_points = Vector::<Vector<Point3f>>::from_iter(ARUCO_BOARD_OBJECT_POINTS.iter().map(
+        |marker_points| {
+            marker_points
+                .iter()
+                .map(|point| Point3f::new(point.0, point.1, point.2))
+                .collect()
+        },
+    ));
+    let dictionary =
+        aruco::get_predefined_dictionary(aruco::PREDEFINED_DICTIONARY_NAME::DICT_4X4_50)?;
+    let all_ids = Vector::<i32>::from_slice(&ARUCO_BOARD_IDS);
+    let board = Board::create(&obj_points, &dictionary, &all_ids)?;
+
+    let mut rvec = Vec3d::default();
+    let mut tvec = Vec3d::default();
+
+    estimate_pose_board(
+        &corners,
+        &ids,
+        &board,
+        intrinsic_matrix,
+        distortion_coeffs,
+        &mut rvec,
+        &mut tvec,
+        false,
+    )?;
+
+    Ok(ArucoPoseResult {
+        rvecs: Vector::<Vec3d>::from_slice(&[rvec]),
+        tvecs: Vector::<Vec3d>::from_slice(&[tvec]),
         corners,
         ids,
     })
@@ -166,8 +311,8 @@ fn write_poses(
     for idx in 0..aruco_result.ids.len() {
         opencv::calib3d::draw_frame_axes(
             out_img,
-            &intrinsic_matrix,
-            &distortion_coeffs,
+            intrinsic_matrix,
+            distortion_coeffs,
             &aruco_result.rvecs.get(idx)?,
             &aruco_result.tvecs.get(idx)?,
             0.05,
@@ -210,8 +355,6 @@ fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
     let mut sum_y: f64 = 0.;
     for target in targets.iter() {
         let center = find_center(target);
-
-        // dbg!(&center);
 
         let rad_theta: f64 = center.theta * PI / 180.;
 
@@ -260,8 +403,7 @@ fn main() -> Result<()> {
             .context("Failed to read frame from camera")?;
 
         let (corners, ids) = extract_markers(&image, &intrinsic_matrix, &distortion_coeffs)?;
-        let aruco_result =
-            analyze_pose_single(corners, ids, &intrinsic_matrix, &distortion_coeffs)?;
+        let aruco_result = analyze_pose_board(corners, ids, &intrinsic_matrix, &distortion_coeffs)?;
         let targets = find_targets(&aruco_result)?;
         write_poses(&image, &aruco_result, &intrinsic_matrix, &distortion_coeffs)?;
         let center = find_average(&targets);
