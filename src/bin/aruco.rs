@@ -126,7 +126,6 @@ pub struct ArucoPoseResult {
     pub rvecs: Vector<Vec3d>,
     pub tvecs: Vector<Vec3d>,
     pub corners: Vector<Vector<Point2f>>,
-    pub ids: Vector<i32>,
 }
 
 // find where the markers are in the image
@@ -160,7 +159,6 @@ fn extract_markers(
 // generate rotation and translation vectors from corners for individual markers
 fn analyze_pose_single(
     corners: Vector<Vector<Point2f>>,
-    ids: Vector<i32>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
 ) -> Result<ArucoPoseResult> {
@@ -181,14 +179,13 @@ fn analyze_pose_single(
         rvecs,
         tvecs,
         corners,
-        ids,
     })
 }
 
 // same thing as `analyze_pose_single` but for a "board" of markers
 fn analyze_pose_board(
     corners: Vector<Vector<Point2f>>,
-    ids: Vector<i32>,
+    ids: &Vector<i32>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
 ) -> Result<ArucoPoseResult> {
@@ -210,7 +207,7 @@ fn analyze_pose_board(
 
     estimate_pose_board(
         &corners,
-        &ids,
+        ids,
         &board,
         intrinsic_matrix,
         distortion_coeffs,
@@ -223,7 +220,6 @@ fn analyze_pose_board(
         rvecs: Vector::<Vec3d>::from_slice(&[rvec]),
         tvecs: Vector::<Vec3d>::from_slice(&[tvec]),
         corners,
-        ids,
     })
 }
 
@@ -231,7 +227,7 @@ fn analyze_pose_board(
 fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     let mut targets = Vec::new();
 
-    for idx in 0..aruco_result.ids.len() {
+    for idx in 0..aruco_result.rvecs.len() {
         let rvec_vec = aruco_result.rvecs.get(idx)?;
         let tvec_vec = aruco_result.tvecs.get(idx)?;
 
@@ -295,6 +291,7 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
 fn write_poses(
     image: &Image<MatImageData>,
     aruco_result: &ArucoPoseResult,
+    ids: &Vector<i32>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
 ) -> Result<()> {
@@ -304,11 +301,11 @@ fn write_poses(
     draw_detected_markers(
         &mut out_img,
         &aruco_result.corners,
-        &aruco_result.ids,
+        ids,
         Scalar::new(255.0, 0.0, 0.0, 0.0),
     )?;
 
-    for idx in 0..aruco_result.ids.len() {
+    for idx in 0..aruco_result.rvecs.len() {
         opencv::calib3d::draw_frame_axes(
             out_img,
             intrinsic_matrix,
@@ -403,9 +400,16 @@ fn main() -> Result<()> {
             .context("Failed to read frame from camera")?;
 
         let (corners, ids) = extract_markers(&image, &intrinsic_matrix, &distortion_coeffs)?;
-        let aruco_result = analyze_pose_board(corners, ids, &intrinsic_matrix, &distortion_coeffs)?;
+        let aruco_result =
+            analyze_pose_board(corners, &ids, &intrinsic_matrix, &distortion_coeffs)?;
         let targets = find_targets(&aruco_result)?;
-        write_poses(&image, &aruco_result, &intrinsic_matrix, &distortion_coeffs)?;
+        write_poses(
+            &image,
+            &aruco_result,
+            &ids,
+            &intrinsic_matrix,
+            &distortion_coeffs,
+        )?;
         let center = find_average(&targets);
 
         dbg!(center);
