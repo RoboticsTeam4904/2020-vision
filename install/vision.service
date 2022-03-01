@@ -1,0 +1,10 @@
+[Unit]
+Description=FRC-4904 Vision Script
+After=network-online.target
+
+[Service]
+Environment=LD_LIBRARY_PATH=/usr/local/lib
+ExecStart=%s/target/release/main
+
+[Install]
+WantedBy=multi-user.target
