@@ -6,8 +6,8 @@ After=dev-video1.device
 
 [Service]
 Environment=LD_LIBRARY_PATH=/usr/local/lib
-WorkingDirectory=%$1s
-ExecStart=%$1s/target/release/main
+WorkingDirectory=%1$s
+ExecStart=%1$s/target/release/main
 
 [Install]
 WantedBy=multi-user.target
