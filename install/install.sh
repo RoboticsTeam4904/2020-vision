@@ -39,14 +39,14 @@ fi
 if [[ "$(uname)" == "Linux" ]]
 then
     # Someone might run this outside of the working directory.
-    SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )/../" &> /dev/null && pwd)
+    cd $(dirname "${BASH_SOURCE[0]}")/..
 
     read -p "Install service? Only do this on the actual Jetson nano. (Y/N)" confirmation
 
     if [[ "$confirmation" =~ ^y|Y$ ]]
     then
+        printf "$(<./install/vision.service)" "$SCRIPT_DIR" | sudo tee /etc/systemd/system/4904_vision.service >/dev/null
         echo 'Installed using the current folder location. If you move the vision folder, rerun this script.'
-        printf "$(<./install/vision.service)" "$SCRIPT_DIR" > /etc/systemd/system/4904_vision.service
     else
         echo 'Service not installed.'
         
