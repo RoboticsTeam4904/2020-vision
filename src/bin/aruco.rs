@@ -348,21 +348,22 @@ fn find_center(target: &VisionTarget) -> VisionTarget {
 }
 
 fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
-    let mut sum_x: f64 = 0.;
-    let mut sum_y: f64 = 0.;
-    for target in targets.iter() {
-        let center = find_center(target);
+    let centers: Vec<(f64, f64)> = targets
+        .iter()
+        .map(|target| {
+            (
+                find_center(target).dist * (find_center(target).theta * PI / 180.).sin(),
+                find_center(target).dist * (find_center(target).theta * PI / 180.).cos(),
+            )
+        })
+        .collect();
 
-        let rad_theta: f64 = center.theta * PI / 180.;
+    let sum: (f64, f64) = centers
+        .iter()
+        .fold((0., 0.), |acc, x| (acc.0 + x.0, acc.1 + x.1));
 
-        let center_x = center.dist * rad_theta.sin();
-        let center_y = center.dist * rad_theta.cos();
-
-        sum_x += center_x;
-        sum_y += center_y;
-    }
-    let dx = sum_x / targets.len() as f64;
-    let dy = sum_y / targets.len() as f64;
+    let dx = sum.0 / targets.len() as f64;
+    let dy = sum.1 / targets.len() as f64;
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
     let theta = dy.atan2(dx) * 180. / PI;
