@@ -1,0 +1,13 @@
+[Unit]
+Description=FRC-4904 Vision Script
+After=network-online.target
+# See webcam.rules
+After=dev-video1.device
+
+[Service]
+Environment=LD_LIBRARY_PATH=/usr/local/lib
+WorkingDirectory=FOLDER_PATH
+ExecStart=FOLDER_PATH/target/release/main
+
+[Install]
+WantedBy=multi-user.target
