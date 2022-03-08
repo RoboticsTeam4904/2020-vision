@@ -45,7 +45,8 @@ then
 
     if [[ "$confirmation" =~ ^y|Y$ ]]
     then
-        printf ${"$(<vision.service)"//FOLDER_PATH/"$(pwd)"} | sudo tee /etc/systemd/system/4904_vision.service >/dev/null
+        vision_template="$(cat vision.service)"
+        printf ${vision_template//FOLDER_PATH/"$(pwd)"} | sudo tee /etc/systemd/system/4904_vision.service >/dev/null
         echo 'Installed using the current folder location. If you move the vision folder, rerun this script.'
     else
         echo 'Service not installed.'
