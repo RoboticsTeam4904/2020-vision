@@ -20,107 +20,133 @@ use stdvis_opencv::{
     convert::{AsArrayView, AsMatView},
 };
 
+const ARUCO_SIZE: f32 = 0.0369;
+
 // for markers from theta = 0 clockwise, for each marker, top left corner and going counter clockwise
-const ARUCO_BOARD_OBJECT_POINTS: [[(f32, f32, f32); 4]; 16] = [
+const ARUCO_BOARD_OBJECT_POINTS_SMALL: [[(f32, f32, f32); 4]; 16] = [
     [
-        (0.6778, 0.0, 0.018),
-        (0.6769, 0.036, 0.018),
-        (0.6769, 0.036, -0.018),
-        (0.6778, 0.0, -0.018),
+        (0.67785, 0.0, 0.01845),
+        (0.676846, 0.036882, 0.01845),
+        (0.676846, 0.036882, -0.01845),
+        (0.67785, 0.0, -0.01845),
     ],
     [
-        (0.6263, 0.2594, 0.018),
-        (0.6116, 0.2923, 0.018),
-        (0.6116, 0.2923, -0.018),
-        (0.6263, 0.2594, -0.018),
+        (0.626252, 0.259402, 0.01845),
+        (0.61121, 0.293092, 0.01845),
+        (0.61121, 0.293092, -0.01845),
+        (0.626252, 0.259402, -0.01845),
     ],
     [
-        (0.4793, 0.4793, 0.018),
-        (0.4532, 0.5041, 0.018),
-        (0.4532, 0.5041, -0.018),
-        (0.4793, 0.4793, -0.018),
+        (0.479312, 0.479312, 0.01845),
+        (0.452523, 0.504682, 0.01845),
+        (0.452523, 0.504682, -0.01845),
+        (0.479312, 0.479312, -0.01845),
     ],
     [
-        (0.2594, 0.6263, 0.018),
-        (0.2258, 0.6391, 0.018),
-        (0.2258, 0.6391, -0.018),
-        (0.2594, 0.6263, -0.018),
+        (0.259402, 0.626252, 0.01845),
+        (0.224943, 0.639438, 0.01845),
+        (0.224943, 0.639438, -0.01845),
+        (0.259402, 0.626252, -0.01845),
     ],
     [
-        (0.0, 0.6778, 0.018),
-        (-0.036, 0.6769, 0.018),
-        (-0.036, 0.6769, -0.018),
-        (0.0, 0.6778, -0.018),
+        (0.0, 0.67785, 0.01845),
+        (-0.036882, 0.676846, 0.01845),
+        (-0.036882, 0.676846, -0.01845),
+        (0.0, 0.67785, -0.01845),
     ],
     [
-        (-0.2594, 0.6263, 0.018),
-        (-0.2923, 0.6116, 0.018),
-        (-0.2923, 0.6116, -0.018),
-        (-0.2594, 0.6263, -0.018),
+        (-0.259402, 0.626252, 0.01845),
+        (-0.293092, 0.61121, 0.01845),
+        (-0.293092, 0.61121, -0.01845),
+        (-0.259402, 0.626252, -0.01845),
     ],
     [
-        (-0.4793, 0.4793, 0.018),
-        (-0.5041, 0.4532, 0.018),
-        (-0.5041, 0.4532, -0.018),
-        (-0.4793, 0.4793, -0.018),
+        (-0.479312, 0.479312, 0.01845),
+        (-0.504682, 0.452523, 0.01845),
+        (-0.504682, 0.452523, -0.01845),
+        (-0.479312, 0.479312, -0.01845),
     ],
     [
-        (-0.6263, 0.2594, 0.018),
-        (-0.6391, 0.2258, 0.018),
-        (-0.6391, 0.2258, -0.018),
-        (-0.6263, 0.2594, -0.018),
+        (-0.626252, 0.259402, 0.01845),
+        (-0.639438, 0.224943, 0.01845),
+        (-0.639438, 0.224943, -0.01845),
+        (-0.626252, 0.259402, -0.01845),
     ],
     [
-        (-0.6778, 0.0, 0.018),
-        (-0.6769, -0.036, 0.018),
-        (-0.6769, -0.036, -0.018),
-        (-0.6778, 0.0, -0.018),
+        (-0.67785, 0.0, 0.01845),
+        (-0.676846, -0.036882, 0.01845),
+        (-0.676846, -0.036882, -0.01845),
+        (-0.67785, 0.0, -0.01845),
     ],
     [
-        (-0.6263, -0.2594, 0.018),
-        (-0.6116, -0.2923, 0.018),
-        (-0.6116, -0.2923, -0.018),
-        (-0.6263, -0.2594, -0.018),
+        (-0.626252, -0.259402, 0.01845),
+        (-0.61121, -0.293092, 0.01845),
+        (-0.61121, -0.293092, -0.01845),
+        (-0.626252, -0.259402, -0.01845),
     ],
     [
-        (-0.4793, -0.4793, 0.018),
-        (-0.4532, -0.5041, 0.018),
-        (-0.4532, -0.5041, -0.018),
-        (-0.4793, -0.4793, -0.018),
+        (-0.479312, -0.479312, 0.01845),
+        (-0.452523, -0.504682, 0.01845),
+        (-0.452523, -0.504682, -0.01845),
+        (-0.479312, -0.479312, -0.01845),
     ],
     [
-        (-0.2594, -0.6263, 0.018),
-        (-0.2258, -0.6391, 0.018),
-        (-0.2258, -0.6391, -0.018),
-        (-0.2594, -0.6263, -0.018),
+        (-0.259402, -0.626252, 0.01845),
+        (-0.224943, -0.639438, 0.01845),
+        (-0.224943, -0.639438, -0.01845),
+        (-0.259402, -0.626252, -0.01845),
     ],
     [
-        (-0.0, -0.6778, 0.018),
-        (0.036, -0.6769, 0.018),
-        (0.036, -0.6769, -0.018),
-        (-0.0, -0.6778, -0.018),
+        (-0.0, -0.67785, 0.01845),
+        (0.036882, -0.676846, 0.01845),
+        (0.036882, -0.676846, -0.01845),
+        (-0.0, -0.67785, -0.01845),
     ],
     [
-        (0.2594, -0.6263, 0.018),
-        (0.2923, -0.6116, 0.018),
-        (0.2923, -0.6116, -0.018),
-        (0.2594, -0.6263, -0.018),
+        (0.259402, -0.626252, 0.01845),
+        (0.293092, -0.61121, 0.01845),
+        (0.293092, -0.61121, -0.01845),
+        (0.259402, -0.626252, -0.01845),
     ],
     [
-        (0.4793, -0.4793, 0.018),
-        (0.5041, -0.4532, 0.018),
-        (0.5041, -0.4532, -0.018),
-        (0.4793, -0.4793, -0.018),
+        (0.479312, -0.479312, 0.01845),
+        (0.504682, -0.452523, 0.01845),
+        (0.504682, -0.452523, -0.01845),
+        (0.479312, -0.479312, -0.01845),
     ],
     [
-        (0.6263, -0.2594, 0.018),
-        (0.6391, -0.2258, 0.018),
-        (0.6391, -0.2258, -0.018),
-        (0.6263, -0.2594, -0.018),
+        (0.626252, -0.259402, 0.01845),
+        (0.639438, -0.224943, 0.01845),
+        (0.639438, -0.224943, -0.01845),
+        (0.626252, -0.259402, -0.01845),
     ],
 ];
 
-const ARUCO_BOARD_IDS: [i32; 16] = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48];
+const ARUCO_BOARD_OBJECT_POINTS_BIG: [[(f32, f32, f32); 4]; 3] = [
+    [
+        (0.67785, 0.0, 0.124),
+        (0.668749, 0.110702, 0.124),
+        (0.668749, 0.110702, 0.0128),
+        (0.67785, 0.0, 0.0128),
+    ],
+    [
+        (0.626252, 0.259402, 0.124),
+        (0.57548, 0.358195, 0.124),
+        (0.57548, 0.358195, 0.0128),
+        (0.626252, 0.259402, 0.0128),
+    ],
+    [
+        (0.479312, 0.479312, 0.124),
+        (0.394599, 0.551155, 0.124),
+        (0.394599, 0.551155, 0.0128),
+        (0.479312, 0.479312, 0.0128),
+    ],
+];
+
+const ARUCO_BOARD_IDS_SMALL: [i32; 16] =
+    [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48];
+
+const ARUCO_BOARD_IDS_BIG: [i32; 3] = [6, 9, 12];
 
 pub struct ArucoPoseResult {
     pub rvecs: Vector<Vec3d>,
@@ -128,7 +154,7 @@ pub struct ArucoPoseResult {
     pub corners: Vector<Vector<Point2f>>,
 }
 
-// find where the markers are in the image
+// find where the markers are in the image, returns (corners, ids)
 fn extract_markers(
     image: &Image<MatImageData>,
     intrinsic_matrix: &Mat,
@@ -167,7 +193,7 @@ fn analyze_pose_single(
 
     estimate_pose_single_markers(
         &corners,
-        0.036,
+        ARUCO_SIZE,
         intrinsic_matrix,
         distortion_coeffs,
         &mut rvecs,
@@ -189,23 +215,23 @@ fn analyze_pose_board(
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
 ) -> Result<ArucoPoseResult> {
-    let obj_points = Vector::<Vector<Point3f>>::from_iter(ARUCO_BOARD_OBJECT_POINTS.iter().map(
-        |marker_points| {
+    let obj_points = Vector::<Vector<Point3f>>::from_iter(
+        ARUCO_BOARD_OBJECT_POINTS_BIG.iter().map(|marker_points| {
             marker_points
                 .iter()
                 .map(|point| Point3f::new(point.0, point.1, point.2))
                 .collect()
-        },
-    ));
+        }),
+    );
     let dictionary =
         aruco::get_predefined_dictionary(aruco::PREDEFINED_DICTIONARY_NAME::DICT_4X4_50)?;
-    let all_ids = Vector::<i32>::from_slice(&ARUCO_BOARD_IDS);
+    let all_ids = Vector::<i32>::from_slice(&ARUCO_BOARD_IDS_BIG);
     let board = Board::create(&obj_points, &dictionary, &all_ids)?;
 
     let mut rvec = Vec3d::default();
     let mut tvec = Vec3d::default();
 
-    estimate_pose_board(
+    let num_markers = estimate_pose_board(
         &corners,
         ids,
         &board,
@@ -215,6 +241,14 @@ fn analyze_pose_board(
         &mut tvec,
         false,
     )?;
+
+    if num_markers == 0 {
+        return Ok(ArucoPoseResult {
+            rvecs: Vector::<Vec3d>::new(),
+            tvecs: Vector::<Vec3d>::new(),
+            corners,
+        });
+    }
 
     Ok(ArucoPoseResult {
         rvecs: Vector::<Vec3d>::from_slice(&[rvec]),
@@ -348,21 +382,22 @@ fn find_center(target: &VisionTarget) -> VisionTarget {
 }
 
 fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
-    let mut sum_x: f64 = 0.;
-    let mut sum_y: f64 = 0.;
-    for target in targets.iter() {
-        let center = find_center(target);
+    let centers: Vec<(f64, f64)> = targets
+        .iter()
+        .map(|target| {
+            (
+                find_center(target).dist * (find_center(target).theta * PI / 180.).sin(),
+                find_center(target).dist * (find_center(target).theta * PI / 180.).cos(),
+            )
+        })
+        .collect();
 
-        let rad_theta: f64 = center.theta * PI / 180.;
+    let sum: (f64, f64) = centers
+        .iter()
+        .fold((0., 0.), |acc, x| (acc.0 + x.0, acc.1 + x.1));
 
-        let center_x = center.dist * rad_theta.sin();
-        let center_y = center.dist * rad_theta.cos();
-
-        sum_x += center_x;
-        sum_y += center_y;
-    }
-    let dx = sum_x / targets.len() as f64;
-    let dy = sum_y / targets.len() as f64;
+    let dx = sum.0 / targets.len() as f64;
+    let dy = sum.1 / targets.len() as f64;
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
     let theta = dy.atan2(dx) * 180. / PI;
@@ -400,6 +435,7 @@ fn main() -> Result<()> {
             .context("Failed to read frame from camera")?;
 
         let (corners, ids) = extract_markers(&image, &intrinsic_matrix, &distortion_coeffs)?;
+        // let aruco_result = analyze_pose_single(corners, &intrinsic_matrix, &distortion_coeffs)?;
         let aruco_result =
             analyze_pose_board(corners, &ids, &intrinsic_matrix, &distortion_coeffs)?;
         let targets = find_targets(&aruco_result)?;
