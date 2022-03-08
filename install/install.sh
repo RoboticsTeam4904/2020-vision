@@ -49,15 +49,15 @@ then
         printf "${vision_template//FOLDER_PATH/$(pwd)}" | sudo tee /etc/systemd/system/4904_vision.service >/dev/null
         sudo cp install/4904_webcam.rules /etc/udev/rules.d
         echo 'Installed using the current folder location. If you move the vision folder, rerun this script.'
-    else
-        echo 'Service not installed.'
-        
+
         read -p "Enable installed service? (Y/N)" confirmation
         if [[ "$confirmation" =~ ^y|Y$ ]]
         then
             sudo systemctl enable 4904_vision.service
             sudo systemctl start 4904_vision
         fi
+    else
+        echo 'Service not installed.'
     fi
 fi
 
