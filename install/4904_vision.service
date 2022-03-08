@@ -1,8 +1,8 @@
 [Unit]
 Description=FRC-4904 Vision Script
 After=network-online.target
-# See webcam.rules
-After=dev-video1.device
+# See 4904_webcam.rules
+After=dev-video0.device
 
 [Service]
 Environment=LD_LIBRARY_PATH=/usr/local/lib

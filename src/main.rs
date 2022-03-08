@@ -4,11 +4,16 @@ mod pipeline;
 
 use anyhow::{Context, Result};
 use serde_json;
-use std::fs::File;
+use std::{fs::File, io::Write, time::SystemTime};
 use stdvis_core::traits::{Camera, ContourExtractor};
 use stdvis_opencv::camera::OpenCVCamera;
 
 fn main() -> Result<()> {
+    // Update last_run_time file.
+    // Used to make sure the vision service is working as intended.
+    let timestamp_file = File::open("last_run_time.txt")?;
+    write!(timestamp_file, "Last run: {:?}", SystemTime::now());
+
     let config_file = File::open("config.json")?;
     let config = serde_json::from_reader(config_file)?;
 
