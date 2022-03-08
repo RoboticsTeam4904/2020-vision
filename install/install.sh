@@ -47,7 +47,7 @@ then
     then
         vision_template="$(<install/4904_vision.service)"
         printf "${vision_template//FOLDER_PATH/$(pwd)}" | sudo tee /etc/systemd/system/4904_vision.service >/dev/null
-        cp install/4904_webcam.rules /etc/udev/rules.d
+        sudo cp install/4904_webcam.rules /etc/udev/rules.d
         echo 'Installed using the current folder location. If you move the vision folder, rerun this script.'
     else
         echo 'Service not installed.'
