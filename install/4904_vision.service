@@ -4,15 +4,13 @@ After=network-online.target
 # See 4904_webcam.rules
 After=dev-video0.device
 Requires=dev-video0.device
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 [Service]
 Environment=LD_LIBRARY_PATH=/usr/local/lib
 WorkingDirectory=FOLDER_PATH
 ExecStart=FOLDER_PATH/target/release/main
 Restart=always
-RestartSec=3
+RestartSec=60
 
 [Install]
 WantedBy=multi-user.target
