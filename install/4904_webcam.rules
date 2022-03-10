@@ -1,2 +1,2 @@
 # See https://serverfault.com/a/916180
-KERNEL=="video0", SYMLINK="video0", TAG+="systemd"
+KERNEL=="video0", SYMLINK="video0", TAG+="systemd", ENV{SYSTEMD_WANTS}="4904_vision.service"
