@@ -11,7 +11,7 @@ use stdvis_opencv::camera::OpenCVCamera;
 fn main() -> Result<()> {
     // Update last_run_time file.
     // Used to make sure the vision service is working as intended.
-    let mut timestamp_file = File::open("last_run_time.txt")?;
+    let mut timestamp_file = File::create("last_run_time.txt")?;
     write!(timestamp_file, "Last run: {:?}", SystemTime::now());
 
     let config_file = File::open("config.json")?;
