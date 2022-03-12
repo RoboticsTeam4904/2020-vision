@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 
     let mut pipeline = pipeline::VisionPipeline::new(camera, extractor, analyzer);
     // TODO: Consider moving destination hostname to environment variable.
-    let sender = UdpSender::new(4904, "nano4904-3:4904");
+    let sender = UdpSender::new(4904, "nano4904-2:4904");
 
     loop {
         let target = pipeline.run()?;
