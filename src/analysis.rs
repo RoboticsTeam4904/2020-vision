@@ -1,8 +1,10 @@
+use std::f64::consts::PI;
+
 use anyhow::Result;
 
 use opencv::{
-    calib3d::{rodrigues, solve_pnp_generic, SolvePnPMethod},
-    core::{Mat, Point2f, Point3f},
+    calib3d::{decompose_projection_matrix, rodrigues, solve_pnp_generic, SolvePnPMethod},
+    core::{hconcat, Mat, Point2f, Point3f},
     prelude::*,
     types::{VectorOfMat, VectorOfPoint2f, VectorOfPoint3f},
 };
@@ -14,27 +16,28 @@ use stdvis_core::{
 
 use stdvis_opencv::convert::AsArrayView;
 
+// center as origin
 const HUB_4_TAPES_OBJECT_POINTS: &[(f32, f32, f32)] = &[
     // left to right
-    (-12.686, 1.0, 0.1465),
-    (-16.837, 1.0, 2.9205),
-    (-16.837, -1.0, 2.9205),
-    (-12.686, -1.0, 0.1465),
+    (-0.3222, 0.0254, 0.6741),
+    (-0.4277, 0.0254, 0.6037),
+    (-0.4277, -0.0254, 0.6037),
+    (-0.3222, -0.0254, 0.6741),
     //
-    (-2.735, 1.0, -2.9205),
-    (-7.632, 1.0, -1.9465),
-    (-7.632, -1.0, -1.9465),
-    (-2.735, -1.0, -2.9205),
+    (-0.0695, 0.0254, 0.752),
+    (-0.1939, 0.0254, 0.7273),
+    (-0.1939, -0.0254, 0.7273),
+    (-0.0695, -0.0254, 0.752),
     //
-    (7.632, 1.0, -1.9465),
-    (2.735, 1.0, -2.9205),
-    (2.735, -1.0, -2.9205),
-    (7.632, -1.0, -1.9465),
+    (0.1939, 0.0254, 0.7273),
+    (0.0695, 0.0254, 0.752),
+    (0.0695, -0.0254, 0.752),
+    (0.1939, -0.0254, 0.7273),
     //
-    (16.837, 1.0, 2.9205),
-    (12.686, 1.0, 0.1465),
-    (12.686, -1.0, 0.1465),
-    (16.837, -1.0, 2.9205),
+    (0.4277, 0.0254, 0.6037),
+    (0.3222, 0.0254, 0.6741),
+    (0.3222, -0.0254, 0.6741),
+    (0.4277, -0.0254, 0.6037),
 ];
 
 pub struct PnPParams<'src> {
@@ -148,55 +151,58 @@ impl WallTapeContourAnalyzer {
         pnp_results: &Vec<PnPResult>,
         config: &CameraConfig,
     ) -> Result<VisionTarget> {
-        let mut result_iter = pnp_results.iter();
+        let PnPResult {
+            rvec_mat, tvec_mat, ..
+        } = pnp_results.get(0).unwrap();
 
-        let (rmat, tvec, camera_pose) = loop {
-            let pnp_result = result_iter.next().expect("Failed to find valid PnP result");
+        let mut rmat_mat = Mat::default();
+        let mut jacobian_mat = Mat::default();
+        rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat)?;
 
-            let PnPResult {
-                rvec_mat, tvec_mat, ..
-            } = pnp_result;
+        let mut mat_array = VectorOfMat::new();
+        mat_array.push(rmat_mat);
+        mat_array.push(tvec_mat.clone());
 
-            let mut rmat_mat = Mat::default();
-            let mut jacobian_mat = Mat::default();
-            rodrigues(&rvec_mat, &mut rmat_mat, &mut jacobian_mat)?;
+        let mut proj_mat = Mat::default();
+        hconcat(&mat_array, &mut proj_mat)?;
 
-            let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
-            let rmat = rmat_mat.as_array_view::<f64>().into_shape((3, 3))?;
-            let rmat_t = rmat.t();
+        let mut camera_matrix = Mat::default();
+        let mut rot_matrix = Mat::default();
+        let mut trans_vect = Mat::default();
+        let mut rot_matrix_x = Mat::default();
+        let mut rot_matrix_y = Mat::default();
+        let mut rot_matrix_z = Mat::default();
+        let mut euler_angles_mat = Mat::default();
+        decompose_projection_matrix(
+            &proj_mat,
+            &mut camera_matrix,
+            &mut rot_matrix,
+            &mut trans_vect,
+            &mut rot_matrix_x,
+            &mut rot_matrix_y,
+            &mut rot_matrix_z,
+            &mut euler_angles_mat,
+        )?;
 
-            let camera_pose = rmat_t.dot(&tvec);
+        let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
 
-            if tvec[[2, 0]].is_sign_negative() {
-                continue;
-            }
+        let x = tvec[[0, 0]];
+        let y = tvec[[1, 0]];
+        let z = tvec[[2, 0]];
 
-            break (rmat.into_owned(), tvec.into_owned(), camera_pose);
-        };
+        let theta = x.atan2(z) * 180. / PI;
 
-        let x = camera_pose[[0, 0]];
-        let y = camera_pose[[1, 0]];
-        let z = camera_pose[[2, 0]];
-
-        let theta = x.atan2(z);
-
-        let r00 = rmat[[0, 0]];
-        let r10 = rmat[[1, 0]];
-        let r20 = rmat[[2, 0]];
-        let r21 = rmat[[2, 1]];
-        let r22 = rmat[[2, 2]];
-
-        let roll = r10.atan2(r00);
-        let pitch = -r20.atan2((r21.powf(2.) + r22.powf(2.)).sqrt());
-        let yaw = r21.atan2(r22);
+        let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
+        let roll = euler_angles[[2, 0]];
+        let pitch = euler_angles[[0, 0]];
+        let yaw = euler_angles[[1, 0]];
 
         Ok(VisionTarget {
-            id,
-            theta: theta + config.pose.angle,
-            beta: yaw + config.pose.angle,
-            dist: config.pose.angle.cos() * config.pose.dist + config.pose.yaw.cos() * z
-                - config.pose.yaw.sin() * x,
-            height: y + config.pose.height,
+            id: 0,
+            theta: theta,
+            beta: yaw,
+            dist: z,
+            height: y,
             confidence: 0.,
         })
     }
