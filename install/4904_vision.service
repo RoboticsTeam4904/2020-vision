@@ -2,6 +2,7 @@
 Description=FRC-4904 Vision Script
 After=network-online.target
 # See 4904_webcam.rules
+After=dev-video0.device
 Requires=dev-video0.device
 StartLimitIntervalSec=2
 StartLimitBurst=5
@@ -10,7 +11,7 @@ StartLimitBurst=5
 Environment=LD_LIBRARY_PATH=/usr/local/lib
 WorkingDirectory=FOLDER_PATH
 ExecStart=FOLDER_PATH/target/release/main
-Restart=always
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
