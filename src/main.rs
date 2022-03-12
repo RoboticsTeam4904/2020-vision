@@ -19,11 +19,11 @@ fn main() -> Result<()> {
 
     let mut pipeline = pipeline::VisionPipeline::new(camera, extractor, analyzer);
     // TODO: Consider moving destination hostname to environment variable.
-    let sender = UdpSender::new(4904, "nano4904-2:4826");
+    let sender = UdpSender::new(4904, "nano4904-2:4826".to_string());
 
     loop {
         let target = pipeline.run()?;
-        dbg!(target);
+        dbg!(&target);
         sender.send((
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
