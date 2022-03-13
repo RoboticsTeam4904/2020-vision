@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::ops::Deref;
 use std::path::PathBuf;
 use stdvis_core::traits::{ContourAnalyzer, ContourExtractor};
 use vision_2020::{analysis, extraction};
@@ -22,22 +23,22 @@ use stdvis_opencv::{camera::MatImageData, convert::AsArrayView};
 
 const ARUCO_BOARD_OBJECT_POINTS_BIG: [[(f32, f32, f32); 4]; 3] = [
     [
-        (0.67785, 0.0, 0.124),
-        (0.668749, 0.110702, 0.124),
-        (0.668749, 0.110702, 0.0128),
-        (0.67785, 0.0, 0.0128),
+        (0.67785, 0.124, 0.0),
+        (0.668749, 0.124, 0.110702),
+        (0.668749, 0.0128, 0.110702),
+        (0.67785, 0.0128, 0.0),
     ],
     [
-        (0.626252, 0.259402, 0.124),
-        (0.57548, 0.358195, 0.124),
-        (0.57548, 0.358195, 0.0128),
-        (0.626252, 0.259402, 0.0128),
+        (0.626252, 0.124, 0.259402),
+        (0.57548, 0.124, 0.358195),
+        (0.57548, 0.0128, 0.358195),
+        (0.626252, 0.0128, 0.259402),
     ],
     [
-        (0.479312, 0.479312, 0.124),
-        (0.394599, 0.551155, 0.124),
-        (0.394599, 0.551155, 0.0128),
-        (0.479312, 0.479312, 0.0128),
+        (0.479312, 0.124, 0.479312),
+        (0.394599, 0.124, 0.551155),
+        (0.394599, 0.0128, 0.551155),
+        (0.479312, 0.0128, 0.479312),
     ],
 ];
 
@@ -176,12 +177,12 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
         let y = tvec_vec.get(1).unwrap();
         let z = tvec_vec.get(2).unwrap();
 
-        let theta = x.atan2(*z) * 180. / PI;
+        let theta = x.atan2(*z);
 
         let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
-        let roll = euler_angles[[2, 0]];
-        let pitch = euler_angles[[0, 0]];
-        let yaw = euler_angles[[1, 0]];
+        let roll = euler_angles[[2, 0]] * PI / 180.;
+        let pitch = euler_angles[[0, 0]] * PI / 180.;
+        let yaw = euler_angles[[1, 0]] * PI / 180.;
 
         let target = VisionTarget {
             id: 0,
@@ -219,10 +220,68 @@ fn main() -> Result<()> {
     let extractor = extraction::RFTapeContourExtractor::new();
     let analyzer = analysis::WallTapeContourAnalyzer::new();
 
+    // -------- IMPORT IMAGES --------
+
+    let mut images = Vec::new();
     for path in image_paths {
-        dbg!(&path);
-        let mut image_mat = imgcodecs::imread(path.to_str().unwrap(), IMREAD_COLOR)
+        let image_mat = imgcodecs::imread(path.to_str().unwrap(), IMREAD_COLOR)
             .context("reading image from disk")?;
+        images.push((
+            image_mat,
+            path.file_name().unwrap().to_str().unwrap().to_string(),
+        ))
+    }
+
+    // -------- ARUCO STUFF --------
+
+    let mut aruco_targets = Vec::new();
+
+    for image_data in &images {
+        let (image_mat, _filename) = image_data;
+        let (corners, ids) = extract_markers(&image_mat, &intrinsic_matrix, &distortion_coeffs)?;
+        let aruco_result =
+            analyze_pose_board(corners, &ids, &intrinsic_matrix, &distortion_coeffs)?;
+        let targets = find_targets(&aruco_result)?;
+        if let Some(target) = targets.get(0) {
+            aruco_targets.push(target.clone());
+        }
+    }
+
+    let aruco_target_sum = aruco_targets.iter().fold(
+        VisionTarget {
+            id: 0,
+            beta: 0.,
+            theta: 0.,
+            dist: 0.,
+            height: 0.,
+            confidence: 0.,
+        },
+        |acc, target| VisionTarget {
+            id: 0,
+            beta: acc.beta + target.beta,
+            theta: acc.theta + target.theta,
+            dist: acc.dist + target.dist,
+            height: acc.height + target.height,
+            confidence: acc.confidence + target.confidence,
+        },
+    );
+    let num_targets = aruco_targets.len() as f64;
+    let aruco_target_avg = VisionTarget {
+        id: 0,
+        beta: aruco_target_sum.beta / num_targets,
+        theta: aruco_target_sum.theta / num_targets,
+        dist: aruco_target_sum.dist / num_targets,
+        height: aruco_target_sum.height / num_targets,
+        confidence: aruco_target_sum.confidence / num_targets as f32,
+    };
+    dbg!(&aruco_target_avg);
+
+    // -------- PNP STUFF --------
+
+    for image_data in images {
+        let (mut image_mat, filename) = image_data;
+
+        dbg!(&filename);
 
         let image_image = Image::new(
             std::time::Instant::now(),
@@ -239,7 +298,19 @@ fn main() -> Result<()> {
                 .analyze(&contour_groups[0])
                 .context("Contour analysis failed")?;
 
-            dbg!(target);
+            dbg!(&target);
+            dbg!(&target.theta * 180. / PI);
+
+            let diff = VisionTarget {
+                id: 0,
+                beta: target.beta - aruco_target_avg.beta,
+                theta: target.theta - aruco_target_avg.theta,
+                dist: target.dist - aruco_target_avg.dist,
+                height: target.height - aruco_target_avg.height,
+                confidence: target.confidence - aruco_target_avg.confidence,
+            };
+
+            // dbg!(diff);
 
             let pnp_params = analyzer.make_pnp_params(&contour_groups[0]);
             let pnp_result = analyzer.solve_pnp(pnp_params)?;
@@ -254,8 +325,6 @@ fn main() -> Result<()> {
                 2,
             )?;
         }
-
-        let filename = path.file_name().unwrap().to_str().unwrap();
 
         opencv::imgcodecs::imwrite(
             &format!("b/{}", filename),
