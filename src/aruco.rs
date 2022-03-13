@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use opencv::{
     aruco::{
         self, detect_markers, draw_detected_markers, estimate_pose_board,
@@ -9,14 +9,10 @@ use opencv::{
     prelude::Mat,
     types::VectorOfMat,
 };
-use serde_json;
-use std::{f64::consts::PI, fs::File, ops::DerefMut};
-use stdvis_core::{
-    traits::Camera,
-    types::{CameraConfig, Image, VisionTarget},
-};
+use std::{f64::consts::PI, ops::DerefMut};
+use stdvis_core::types::{Image, VisionTarget};
 use stdvis_opencv::{
-    camera::{MatImageData, OpenCVCamera},
+    camera::MatImageData,
     convert::{AsArrayView, AsMatView},
 };
 
@@ -155,7 +151,7 @@ pub struct ArucoPoseResult {
 }
 
 // find where the markers are in the image, returns (corners, ids)
-fn extract_markers(
+pub fn extract_markers(
     image: &Image<MatImageData>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
@@ -183,7 +179,7 @@ fn extract_markers(
 }
 
 // generate rotation and translation vectors from corners for individual markers
-fn analyze_pose_single(
+pub fn analyze_pose_single(
     corners: Vector<Vector<Point2f>>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
@@ -209,7 +205,7 @@ fn analyze_pose_single(
 }
 
 // same thing as `analyze_pose_single` but for a "board" of markers
-fn analyze_pose_board(
+pub fn analyze_pose_board(
     corners: Vector<Vector<Point2f>>,
     ids: &Vector<i32>,
     intrinsic_matrix: &Mat,
@@ -258,7 +254,7 @@ fn analyze_pose_board(
 }
 
 // find dist, theta, and yaw from rvecs and tvecs
-fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
+pub fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     let mut targets = Vec::new();
 
     for idx in 0..aruco_result.rvecs.len() {
@@ -321,7 +317,7 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     Ok(targets)
 }
 
-fn write_poses(
+pub fn write_poses(
     image: &Image<MatImageData>,
     aruco_result: &ArucoPoseResult,
     ids: &Vector<i32>,
@@ -359,7 +355,7 @@ fn write_poses(
     Ok(())
 }
 
-fn find_center(target: &VisionTarget) -> VisionTarget {
+pub fn find_center(target: &VisionTarget) -> VisionTarget {
     let hoop_rad: f64 = 0.67785;
 
     let dx = target.dist * target.theta.sin() + hoop_rad * target.beta.sin();
@@ -378,7 +374,8 @@ fn find_center(target: &VisionTarget) -> VisionTarget {
     }
 }
 
-fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
+// *** THIS DOES NOT WORK ***
+pub fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
     let centers: Vec<(f64, f64)> = targets
         .iter()
         .map(|target| {
@@ -407,45 +404,4 @@ fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
         height: 0.,
         confidence: 0.,
     }
-}
-
-fn main() -> Result<()> {
-    let config_file = File::open("config.json")?;
-    let config: CameraConfig = serde_json::from_reader(config_file)?;
-
-    let i = &config.intrinsic_matrix;
-    let d = &config.distortion_coeffs;
-
-    let intrinsic_matrix = Mat::from_slice_2d(&[
-        &[i[[0, 0]], i[[0, 1]], i[[0, 2]]],
-        &[i[[1, 0]], i[[1, 1]], i[[1, 2]]],
-        &[i[[2, 0]], i[[2, 1]], i[[2, 2]]],
-    ])?;
-
-    let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap())?;
-
-    let mut camera = OpenCVCamera::new(config)?;
-
-    loop {
-        let image = camera
-            .grab_frame()
-            .context("Failed to read frame from camera")?;
-
-        let (corners, ids) = extract_markers(&image, &intrinsic_matrix, &distortion_coeffs)?;
-        // let aruco_result = analyze_pose_single(corners, &intrinsic_matrix, &distortion_coeffs)?;
-        let aruco_result =
-            analyze_pose_board(corners, &ids, &intrinsic_matrix, &distortion_coeffs)?;
-        let targets = find_targets(&aruco_result)?;
-        write_poses(
-            &image,
-            &aruco_result,
-            &ids,
-            &intrinsic_matrix,
-            &distortion_coeffs,
-        )?;
-
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
-
-    Ok(())
 }
