@@ -198,7 +198,7 @@ impl WallTapeContourAnalyzer {
         let y = tvec[[1, 0]];
         let z = tvec[[2, 0]];
 
-        let theta = (-x).atan2(z);
+        let theta = x.atan2(z);
 
         let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
         let roll = euler_angles[[2, 0]] * PI / 180.;
@@ -206,7 +206,7 @@ impl WallTapeContourAnalyzer {
         let yaw = euler_angles[[1, 0]] * PI / 180.;
 
         Ok(VisionTarget {
-            id: 0,
+            id: id,
             theta: theta,
             beta: yaw,
             dist: (x.powi(2) + z.powi(2)).sqrt(),
