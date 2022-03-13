@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use opencv::{
     aruco::{
         self, detect_markers, draw_detected_markers, estimate_pose_board,
@@ -9,14 +9,10 @@ use opencv::{
     prelude::Mat,
     types::VectorOfMat,
 };
-use serde_json;
-use std::{f64::consts::PI, fs::File, ops::DerefMut};
-use stdvis_core::{
-    traits::Camera,
-    types::{CameraConfig, Image, VisionTarget},
-};
+use std::{f64::consts::PI, ops::DerefMut};
+use stdvis_core::types::{Image, VisionTarget};
 use stdvis_opencv::{
-    camera::{MatImageData, OpenCVCamera},
+    camera::MatImageData,
     convert::{AsArrayView, AsMatView},
 };
 
@@ -122,29 +118,29 @@ const ARUCO_BOARD_OBJECT_POINTS_SMALL: [[(f32, f32, f32); 4]; 16] = [
     ],
 ];
 
-const ARUCO_BOARD_OBJECT_POINTS_BIG: [[(f32, f32, f32); 4]; 3] = [
-    [
-        (0.67785, 0.0, 0.124),
-        (0.668749, 0.110702, 0.124),
-        (0.668749, 0.110702, 0.0128),
-        (0.67785, 0.0, 0.0128),
-    ],
-    [
-        (0.626252, 0.259402, 0.124),
-        (0.57548, 0.358195, 0.124),
-        (0.57548, 0.358195, 0.0128),
-        (0.626252, 0.259402, 0.0128),
-    ],
-    [
-        (0.479312, 0.479312, 0.124),
-        (0.394599, 0.551155, 0.124),
-        (0.394599, 0.551155, 0.0128),
-        (0.479312, 0.479312, 0.0128),
-    ],
-];
-
 const ARUCO_BOARD_IDS_SMALL: [i32; 16] =
     [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48];
+
+const ARUCO_BOARD_OBJECT_POINTS_BIG: [[(f32, f32, f32); 4]; 3] = [
+    [
+        (0.67785, 0.124, 0.0),
+        (0.668749, 0.124, 0.110702),
+        (0.668749, 0.0128, 0.110702),
+        (0.67785, 0.0128, 0.0),
+    ],
+    [
+        (0.626252, 0.124, 0.259402),
+        (0.57548, 0.124, 0.358195),
+        (0.57548, 0.0128, 0.358195),
+        (0.626252, 0.0128, 0.259402),
+    ],
+    [
+        (0.479312, 0.124, 0.479312),
+        (0.394599, 0.124, 0.551155),
+        (0.394599, 0.0128, 0.551155),
+        (0.479312, 0.0128, 0.479312),
+    ],
+];
 
 const ARUCO_BOARD_IDS_BIG: [i32; 3] = [6, 9, 12];
 
@@ -155,7 +151,7 @@ pub struct ArucoPoseResult {
 }
 
 // find where the markers are in the image, returns (corners, ids)
-fn extract_markers(
+pub fn extract_markers(
     image: &Image<MatImageData>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
@@ -183,7 +179,7 @@ fn extract_markers(
 }
 
 // generate rotation and translation vectors from corners for individual markers
-fn analyze_pose_single(
+pub fn analyze_pose_single(
     corners: Vector<Vector<Point2f>>,
     intrinsic_matrix: &Mat,
     distortion_coeffs: &Mat,
@@ -209,7 +205,7 @@ fn analyze_pose_single(
 }
 
 // same thing as `analyze_pose_single` but for a "board" of markers
-fn analyze_pose_board(
+pub fn analyze_pose_board(
     corners: Vector<Vector<Point2f>>,
     ids: &Vector<i32>,
     intrinsic_matrix: &Mat,
@@ -258,7 +254,7 @@ fn analyze_pose_board(
 }
 
 // find dist, theta, and yaw from rvecs and tvecs
-fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
+pub fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     let mut targets = Vec::new();
 
     for idx in 0..aruco_result.rvecs.len() {
@@ -270,7 +266,6 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
         rodrigues(&rvec_vec, &mut rmat_mat, &mut jacobian_mat)?;
 
         let tvec_mat = Mat::from_exact_iter(tvec_vec.into_iter())?;
-        // let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
 
         let mut mat_array = VectorOfMat::new();
         mat_array.push(rmat_mat);
@@ -301,18 +296,18 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
         let y = tvec_vec.get(1).unwrap();
         let z = tvec_vec.get(2).unwrap();
 
-        let theta = x.atan2(*z) * 180. / PI;
+        let theta = (-x).atan2(-z);
 
         let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
-        let roll = euler_angles[[2, 0]];
-        let pitch = euler_angles[[0, 0]];
-        let yaw = euler_angles[[1, 0]];
+        let roll = euler_angles[[2, 0]] * PI / 180.;
+        let pitch = euler_angles[[0, 0]] * PI / 180.;
+        let yaw = euler_angles[[1, 0]] * PI / 180.;
 
         let target = VisionTarget {
             id: 0,
             theta: theta,
             beta: yaw,
-            dist: *z,
+            dist: (x.powi(2) + z.powi(2)).sqrt(),
             height: *y,
             confidence: 0.,
         };
@@ -322,7 +317,7 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
     Ok(targets)
 }
 
-fn write_poses(
+pub fn write_poses(
     image: &Image<MatImageData>,
     aruco_result: &ArucoPoseResult,
     ids: &Vector<i32>,
@@ -360,16 +355,14 @@ fn write_poses(
     Ok(())
 }
 
-fn find_center(target: &VisionTarget) -> VisionTarget {
+pub fn find_center(target: &VisionTarget) -> VisionTarget {
     let hoop_rad: f64 = 0.67785;
-    let rad_theta: f64 = target.theta * PI / 180.;
-    let rad_beta: f64 = target.beta * PI / 180.;
 
-    let dx = target.dist * rad_theta.sin() + hoop_rad * rad_beta.sin();
-    let dy = target.dist * rad_theta.cos() + hoop_rad * rad_beta.cos();
+    let dx = target.dist * target.theta.sin() + hoop_rad * target.beta.sin();
+    let dy = target.dist * target.theta.cos() + hoop_rad * target.beta.cos();
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
-    let theta = dy.atan2(dx) * 180. / PI;
+    let theta = dy.atan2(dx);
 
     VisionTarget {
         id: target.id,
@@ -381,13 +374,14 @@ fn find_center(target: &VisionTarget) -> VisionTarget {
     }
 }
 
-fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
+// *** THIS DOES NOT WORK ***
+pub fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
     let centers: Vec<(f64, f64)> = targets
         .iter()
         .map(|target| {
             (
-                find_center(target).dist * (find_center(target).theta * PI / 180.).sin(),
-                find_center(target).dist * (find_center(target).theta * PI / 180.).cos(),
+                find_center(target).dist * (find_center(target).theta).sin(),
+                find_center(target).dist * (find_center(target).theta).cos(),
             )
         })
         .collect();
@@ -400,7 +394,7 @@ fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
     let dy = sum.1 / targets.len() as f64;
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
-    let theta = dy.atan2(dx) * 180. / PI;
+    let theta = dy.atan2(dx);
 
     VisionTarget {
         id: 0,
@@ -410,50 +404,4 @@ fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
         height: 0.,
         confidence: 0.,
     }
-}
-
-fn main() -> Result<()> {
-    let config_file = File::open("config.json")?;
-    let config: CameraConfig = serde_json::from_reader(config_file)?;
-
-    let i = &config.intrinsic_matrix;
-    let d = &config.distortion_coeffs;
-
-    let intrinsic_matrix = Mat::from_slice_2d(&[
-        &[i[[0, 0]], i[[0, 1]], i[[0, 2]]],
-        &[i[[1, 0]], i[[1, 1]], i[[1, 2]]],
-        &[i[[2, 0]], i[[2, 1]], i[[2, 2]]],
-    ])?;
-
-    let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap())?;
-
-    let mut camera = OpenCVCamera::new(config)?;
-
-    loop {
-        let image = camera
-            .grab_frame()
-            .context("Failed to read frame from camera")?;
-
-        let (corners, ids) = extract_markers(&image, &intrinsic_matrix, &distortion_coeffs)?;
-        // let aruco_result = analyze_pose_single(corners, &intrinsic_matrix, &distortion_coeffs)?;
-        let aruco_result =
-            analyze_pose_board(corners, &ids, &intrinsic_matrix, &distortion_coeffs)?;
-        let targets = find_targets(&aruco_result)?;
-        write_poses(
-            &image,
-            &aruco_result,
-            &ids,
-            &intrinsic_matrix,
-            &distortion_coeffs,
-        )?;
-        let center = find_average(&targets);
-
-        dbg!(center);
-
-        println!("-------------------------------");
-
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
-
-    Ok(())
 }

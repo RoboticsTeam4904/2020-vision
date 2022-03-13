@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use opencv::{
     calib3d::{decompose_projection_matrix, rodrigues, solve_pnp_generic, SolvePnPMethod},
-    core::{hconcat, Mat, Point2f, Point3f},
+    core::{hconcat, Mat, Point2f, Point3f, Vector},
     prelude::*,
     types::{VectorOfMat, VectorOfPoint2f, VectorOfPoint3f},
 };
@@ -51,6 +51,7 @@ pub struct PnPResult {
     pub distortion_coeffs: Mat,
     pub rvec_mat: Mat,
     pub tvec_mat: Mat,
+    pub reproj_error: f32,
 }
 
 pub struct WallTapeContourAnalyzer {
@@ -117,6 +118,8 @@ impl WallTapeContourAnalyzer {
 
         let distortion_coeffs = Mat::from_slice(d.as_slice().unwrap())?;
 
+        let mut reproj_errors = Vector::<f32>::new();
+
         solve_pnp_generic(
             &obj_points,
             &img_points,
@@ -128,17 +131,19 @@ impl WallTapeContourAnalyzer {
             SolvePnPMethod::SOLVEPNP_EPNP,
             &opencv::core::no_array(),
             &opencv::core::no_array(),
-            &mut opencv::core::no_array(),
+            &mut reproj_errors,
         )?;
 
         let results = rvec_mats
             .iter()
             .zip(tvec_mats)
-            .map(|(rvec_mat, tvec_mat)| PnPResult {
+            .zip(reproj_errors)
+            .map(|((rvec_mat, tvec_mat), reproj_error)| PnPResult {
                 intrinsic_matrix: Mat::copy(&intrinsic_matrix).unwrap(),
                 distortion_coeffs: Mat::copy(&distortion_coeffs).unwrap(),
                 rvec_mat,
                 tvec_mat,
+                reproj_error,
             })
             .collect();
 
@@ -152,7 +157,10 @@ impl WallTapeContourAnalyzer {
         config: &CameraConfig,
     ) -> Result<VisionTarget> {
         let PnPResult {
-            rvec_mat, tvec_mat, ..
+            rvec_mat,
+            tvec_mat,
+            reproj_error,
+            ..
         } = pnp_results.get(0).unwrap();
 
         let mut rmat_mat = Mat::default();
@@ -190,20 +198,20 @@ impl WallTapeContourAnalyzer {
         let y = tvec[[1, 0]];
         let z = tvec[[2, 0]];
 
-        let theta = x.atan2(z) * 180. / PI;
+        let theta = (-x).atan2(z);
 
         let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
-        let roll = euler_angles[[2, 0]];
-        let pitch = euler_angles[[0, 0]];
-        let yaw = euler_angles[[1, 0]];
+        let roll = euler_angles[[2, 0]] * PI / 180.;
+        let pitch = euler_angles[[0, 0]] * PI / 180.;
+        let yaw = euler_angles[[1, 0]] * PI / 180.;
 
         Ok(VisionTarget {
             id: 0,
             theta: theta,
             beta: yaw,
-            dist: z,
+            dist: (x.powi(2) + z.powi(2)).sqrt(),
             height: y,
-            confidence: 0.,
+            confidence: *reproj_error,
         })
     }
 }
@@ -213,7 +221,9 @@ impl ContourAnalyzer for WallTapeContourAnalyzer {
         let pnp_params = self.make_pnp_params(contour_group);
         let pnp_result = self.solve_pnp(pnp_params)?;
 
-        let target = self.find_target(contour_group.id, &pnp_result, contour_group.camera)?;
+        let mut target = self.find_target(contour_group.id, &pnp_result, contour_group.camera)?;
+
+        target.beta = 0.;
 
         Ok(target)
     }
