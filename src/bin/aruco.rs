@@ -300,20 +300,12 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
         let y = tvec_vec.get(1).unwrap();
         let z = tvec_vec.get(2).unwrap();
 
-        // dbg!(x, y, z);
-        // println!("-------------");
-
         let theta = (-x).atan2(-z);
 
         let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
         let roll = euler_angles[[2, 0]] * PI / 180.;
         let pitch = euler_angles[[0, 0]] * PI / 180.;
         let yaw = euler_angles[[1, 0]] * PI / 180.;
-
-        // let theta = (yaw.cos() * x + yaw.sin() * z).atan2(yaw.cos() * z - yaw.sin() * x);
-
-        dbg!(yaw * 180. / PI, x, z, theta * 180. / PI);
-        println!("-------");
 
         let target = VisionTarget {
             id: 0,
@@ -451,13 +443,6 @@ fn main() -> Result<()> {
             &intrinsic_matrix,
             &distortion_coeffs,
         )?;
-
-        // dbg!(&targets);
-        // let center = find_average(&targets);
-
-        // dbg!(center);
-
-        // println!("-------------------------------");
 
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
