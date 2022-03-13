@@ -3,6 +3,8 @@ use serde::Serialize;
 use std::{
     io::Result,
     net::{SocketAddr, UdpSocket},
+    thread,
+    time::Duration,
 };
 
 pub struct UdpSender {
@@ -11,8 +13,11 @@ pub struct UdpSender {
 
 impl UdpSender {
     pub fn new(src_port: u16, dst_address: String) -> UdpSender {
-        let socket = UdpSocket::bind(SocketAddr::from(([127, 0, 0, 1], src_port))).unwrap();
-        socket.connect(dst_address).unwrap();
+        let socket = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], src_port))).unwrap();
+        // Block until hostname lookup succeeds
+        while socket.connect(&dst_address).is_err() {
+            thread::sleep(Duration::from_secs(3));
+        }
         socket.set_nonblocking(true).unwrap();
         UdpSender { socket }
     }
