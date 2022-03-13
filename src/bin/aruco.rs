@@ -122,29 +122,29 @@ const ARUCO_BOARD_OBJECT_POINTS_SMALL: [[(f32, f32, f32); 4]; 16] = [
     ],
 ];
 
-const ARUCO_BOARD_OBJECT_POINTS_BIG: [[(f32, f32, f32); 4]; 3] = [
-    [
-        (0.67785, 0.0, 0.124),
-        (0.668749, 0.110702, 0.124),
-        (0.668749, 0.110702, 0.0128),
-        (0.67785, 0.0, 0.0128),
-    ],
-    [
-        (0.626252, 0.259402, 0.124),
-        (0.57548, 0.358195, 0.124),
-        (0.57548, 0.358195, 0.0128),
-        (0.626252, 0.259402, 0.0128),
-    ],
-    [
-        (0.479312, 0.479312, 0.124),
-        (0.394599, 0.551155, 0.124),
-        (0.394599, 0.551155, 0.0128),
-        (0.479312, 0.479312, 0.0128),
-    ],
-];
-
 const ARUCO_BOARD_IDS_SMALL: [i32; 16] =
     [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48];
+
+const ARUCO_BOARD_OBJECT_POINTS_BIG: [[(f32, f32, f32); 4]; 3] = [
+    [
+        (0.67785, 0.124, 0.0),
+        (0.668749, 0.124, 0.110702),
+        (0.668749, 0.0128, 0.110702),
+        (0.67785, 0.0128, 0.0),
+    ],
+    [
+        (0.626252, 0.124, 0.259402),
+        (0.57548, 0.124, 0.358195),
+        (0.57548, 0.0128, 0.358195),
+        (0.626252, 0.0128, 0.259402),
+    ],
+    [
+        (0.479312, 0.124, 0.479312),
+        (0.394599, 0.124, 0.551155),
+        (0.394599, 0.0128, 0.551155),
+        (0.479312, 0.0128, 0.479312),
+    ],
+];
 
 const ARUCO_BOARD_IDS_BIG: [i32; 3] = [6, 9, 12];
 
@@ -270,7 +270,6 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
         rodrigues(&rvec_vec, &mut rmat_mat, &mut jacobian_mat)?;
 
         let tvec_mat = Mat::from_exact_iter(tvec_vec.into_iter())?;
-        // let tvec = tvec_mat.as_array_view::<f64>().into_shape((3, 1))?;
 
         let mut mat_array = VectorOfMat::new();
         mat_array.push(rmat_mat);
@@ -301,18 +300,26 @@ fn find_targets(aruco_result: &ArucoPoseResult) -> Result<Vec<VisionTarget>> {
         let y = tvec_vec.get(1).unwrap();
         let z = tvec_vec.get(2).unwrap();
 
-        let theta = x.atan2(*z) * 180. / PI;
+        // dbg!(x, y, z);
+        // println!("-------------");
+
+        let theta = (-x).atan2(-z);
 
         let euler_angles = euler_angles_mat.as_array_view::<f64>().into_shape((3, 1))?;
-        let roll = euler_angles[[2, 0]];
-        let pitch = euler_angles[[0, 0]];
-        let yaw = euler_angles[[1, 0]];
+        let roll = euler_angles[[2, 0]] * PI / 180.;
+        let pitch = euler_angles[[0, 0]] * PI / 180.;
+        let yaw = euler_angles[[1, 0]] * PI / 180.;
+
+        // let theta = (yaw.cos() * x + yaw.sin() * z).atan2(yaw.cos() * z - yaw.sin() * x);
+
+        dbg!(yaw * 180. / PI, x, z, theta * 180. / PI);
+        println!("-------");
 
         let target = VisionTarget {
             id: 0,
             theta: theta,
             beta: yaw,
-            dist: *z,
+            dist: (x.powi(2) + z.powi(2)).sqrt(),
             height: *y,
             confidence: 0.,
         };
@@ -362,14 +369,12 @@ fn write_poses(
 
 fn find_center(target: &VisionTarget) -> VisionTarget {
     let hoop_rad: f64 = 0.67785;
-    let rad_theta: f64 = target.theta * PI / 180.;
-    let rad_beta: f64 = target.beta * PI / 180.;
 
-    let dx = target.dist * rad_theta.sin() + hoop_rad * rad_beta.sin();
-    let dy = target.dist * rad_theta.cos() + hoop_rad * rad_beta.cos();
+    let dx = target.dist * target.theta.sin() + hoop_rad * target.beta.sin();
+    let dy = target.dist * target.theta.cos() + hoop_rad * target.beta.cos();
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
-    let theta = dy.atan2(dx) * 180. / PI;
+    let theta = dy.atan2(dx);
 
     VisionTarget {
         id: target.id,
@@ -386,8 +391,8 @@ fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
         .iter()
         .map(|target| {
             (
-                find_center(target).dist * (find_center(target).theta * PI / 180.).sin(),
-                find_center(target).dist * (find_center(target).theta * PI / 180.).cos(),
+                find_center(target).dist * (find_center(target).theta).sin(),
+                find_center(target).dist * (find_center(target).theta).cos(),
             )
         })
         .collect();
@@ -400,7 +405,7 @@ fn find_average(targets: &Vec<VisionTarget>) -> VisionTarget {
     let dy = sum.1 / targets.len() as f64;
 
     let dist = (dx.powi(2) + dy.powi(2)).sqrt();
-    let theta = dy.atan2(dx) * 180. / PI;
+    let theta = dy.atan2(dx);
 
     VisionTarget {
         id: 0,
@@ -446,11 +451,13 @@ fn main() -> Result<()> {
             &intrinsic_matrix,
             &distortion_coeffs,
         )?;
-        let center = find_average(&targets);
 
-        dbg!(center);
+        // dbg!(&targets);
+        // let center = find_average(&targets);
 
-        println!("-------------------------------");
+        // dbg!(center);
+
+        // println!("-------------------------------");
 
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
