@@ -18,6 +18,7 @@ fn main() -> Result<()> {
     let analyzer = analysis::WallTapeContourAnalyzer::new();
 
     let mut pipeline = pipeline::VisionPipeline::new(camera, extractor, analyzer);
+
     // TODO: Consider moving destination hostname to environment variable.
     // This line will block until the hostname appears on the network.
     let sender = UdpSender::new(4904, "nano2-4904-frc.local:4826".to_string());
@@ -25,13 +26,13 @@ fn main() -> Result<()> {
     loop {
         let target = pipeline.run()?;
         dbg!(&target);
-        sender.send((
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs_f64(),
-            target,
-        ));
+        // sender.send((
+        //     SystemTime::now()
+        //         .duration_since(SystemTime::UNIX_EPOCH)
+        //         .unwrap()
+        //         .as_secs_f64(),
+        //     target,
+        // ));
 
         // let frame = camera
         //     .grab_frame()
