@@ -4,8 +4,7 @@ mod pipeline;
 
 use anyhow::{Context, Result};
 use serde_json;
-use std::{fs::File, io::Write, time::SystemTime};
-use stdvis_core::traits::{Camera, ContourExtractor};
+use std::{fs::File, time::SystemTime};
 use stdvis_opencv::camera::OpenCVCamera;
 use vision_2020::udp::UdpSender;
 
@@ -21,26 +20,20 @@ fn main() -> Result<()> {
 
     // TODO: Consider moving destination hostname to environment variable.
     // This line will block until the hostname appears on the network.
-    let sender = UdpSender::new(4904, "nano2-4904-frc.local:4826".to_string());
+    let localization_sender = UdpSender::new(4904, "nano2-4904-frc.local:4826".to_string());
+    let driverstation_sender = UdpSender::new(4905, "DESKTOP-E0B7IEK".to_string());
 
     loop {
         let target = pipeline.run()?;
         dbg!(&target);
-        // sender.send((
-        //     SystemTime::now()
-        //         .duration_since(SystemTime::UNIX_EPOCH)
-        //         .unwrap()
-        //         .as_secs_f64(),
-        //     target,
-        // ));
 
-        // let frame = camera
-        //     .grab_frame()
-        //     .context("Failed to read frame from camera")?;
-
-        // let _contour_groups = extractor
-        //     .extract_from(&frame)
-        //     .context("Contour extraction failed")?;
+        localization_sender.send((
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64(),
+            target,
+        ));
 
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
