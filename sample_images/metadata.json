@@ -1,0 +1,784 @@
+{
+  "images": [
+    {
+      "index": 0,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 1,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 2,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 3,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 4,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 5,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 6,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 7,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 8,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 9,
+      "label": "",
+      "config": {
+        "id": 0,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 10,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 11,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 12,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 13,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 14,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 15,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 16,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 17,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 18,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    },
+    {
+      "index": 19,
+      "label": "",
+      "config": {
+        "id": 1,
+        "resolution": [
+          0,
+          0
+        ],
+        "pose": {
+          "angle": 0.0,
+          "dist": 0.0,
+          "height": 0.0,
+          "yaw": 0.0,
+          "pitch": 0.0,
+          "roll": 0.0
+        },
+        "fov": [
+          0.0,
+          0.0
+        ],
+        "intrinsic_matrix": {
+          "v": 1,
+          "dim": [
+            0,
+            0
+          ],
+          "data": []
+        },
+        "distortion_coeffs": {
+          "v": 1,
+          "dim": [
+            0
+          ],
+          "data": []
+        }
+      },
+      "exposure": 0.0
+    }
+  ]
+}
