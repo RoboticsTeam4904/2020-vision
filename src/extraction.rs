@@ -490,12 +490,12 @@ impl RFTapeContourExtractor {
         let mut result_groups = Vec::new();
         let heuristic_filtered_contours = Target::heuristic_filter(contour_groups)?;
 
-        self.write_contours(
-            grayscale_image_mat,
-            &heuristic_filtered_contours,
-            Scalar::new(255.0, 0.0, 0.0, 0.0),
-            "heuristic_filter.png",
-        )?;
+        // self.write_contours(
+        //     grayscale_image_mat,
+        //     &heuristic_filtered_contours,
+        //     Scalar::new(255.0, 0.0, 0.0, 0.0),
+        //     "heuristic_filter.png",
+        // )?;
 
         let target_contours = Target::specific_filter(&heuristic_filtered_contours)?;
 
@@ -503,7 +503,7 @@ impl RFTapeContourExtractor {
             grayscale_image_mat,
             &target_contours,
             Scalar::new(0.0, 255.0, 0.0, 0.0),
-            "full_filter.png",
+            "image_stream.jpg",
         )?;
 
         if target_contours.len() == 0 {
@@ -547,12 +547,12 @@ impl ContourExtractor for RFTapeContourExtractor {
 
         let grayscale_image_mat = self.grayscale_image(&image_mat)?;
 
-        self.write_contours(
-            &grayscale_image_mat,
-            &contour_groups,
-            Scalar::new(0.0, 0.0, 255.0, 0.0),
-            "unfiltered.png",
-        )?;
+        // self.write_contours(
+        //     &grayscale_image_mat,
+        //     &contour_groups,
+        //     Scalar::new(0.0, 0.0, 255.0, 0.0),
+        //     "unfiltered.png",
+        // )?;
 
         let hub_contours = self
             .extract_matching_contours::<Hub4TapesTarget>(

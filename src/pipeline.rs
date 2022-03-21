@@ -40,16 +40,6 @@ where
             .grab_frame()
             .context("Failed to read frame from camera")?;
 
-        // --- for steaming camera ---
-        let mat_image = frame.as_mat_view();
-
-        opencv::imgcodecs::imwrite(
-            "image_stream.jpg",
-            mat_image.deref(),
-            &opencv::types::VectorOfi32::with_capacity(0),
-        )?;
-        // ----------
-
         let contour_groups = self
             .extractor
             .extract_from(&frame)
