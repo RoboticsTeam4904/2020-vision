@@ -1,6 +1,5 @@
-use std::ops::Deref;
-
 use anyhow::{Context, Result};
+use std::time::{Duration, Instant};
 use stdvis_core::{
     traits::{Camera as CameraTrait, ContourAnalyzer, ContourExtractor, ImageData},
     types::VisionTarget,
@@ -39,6 +38,8 @@ where
             .camera
             .grab_frame()
             .context("Failed to read frame from camera")?;
+
+        let frame_mat = frame.as_mat_view();
 
         let contour_groups = self
             .extractor

@@ -499,12 +499,12 @@ impl RFTapeContourExtractor {
 
         let target_contours = Target::specific_filter(&heuristic_filtered_contours)?;
 
-        self.write_contours(
-            grayscale_image_mat,
-            &target_contours,
-            Scalar::new(0.0, 255.0, 0.0, 0.0),
-            "image_stream.jpg",
-        )?;
+        // self.write_contours(
+        //     grayscale_image_mat,
+        //     &target_contours,
+        //     Scalar::new(0.0, 255.0, 0.0, 0.0),
+        //     "image_stream.jpg",
+        // )?;
 
         if target_contours.len() == 0 {
             return Ok(result_groups);
